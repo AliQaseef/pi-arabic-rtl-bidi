@@ -1,0 +1,1702 @@
+diff --git a/packages/coding-agent/docs/environment-variables.md b/packages/coding-agent/docs/environment-variables.md
+index 828d617..5b9239a 100644
+--- a/packages/coding-agent/docs/environment-variables.md
++++ b/packages/coding-agent/docs/environment-variables.md
+@@ -82,6 +82,7 @@ These variables are read by Pi itself:
+ | `PI_CODING_AGENT_SESSION_DIR` | Override session storage; overridden by `--session-dir` |
+ | `PI_PACKAGE_DIR` | Override the package directory, useful for Nix/Guix store paths |
+ | `PI_OFFLINE` | Disable automatic network activity, including model catalog refreshes |
++| `PI_RTL` | Set to `0` to turn off right-to-left reordering for display, regardless of settings |
+ | `PI_SKIP_VERSION_CHECK` | Disable the `pi.dev` latest-version request |
+ | `PI_TELEMETRY` | Override install/update telemetry and provider attribution headers: `1`/`true`/`yes` or `0`/`false`/`no` |
+ | `PI_CODEMODE_MAX_WORKERS` | Maximum codemode workers alive at once across all sessions in the process; default `2`. Each worker's script may use up to 256 MB. Raise it when one process runs several sessions, such as in-process subagents. Further scripts wait for a free worker. See [Codemode](codemode.md) |
+diff --git a/packages/coding-agent/docs/settings.md b/packages/coding-agent/docs/settings.md
+index 7e28985..3a43122 100644
+--- a/packages/coding-agent/docs/settings.md
++++ b/packages/coding-agent/docs/settings.md
+@@ -110,6 +110,8 @@ See [Compaction Reference](compaction.md) for trigger, summarization, and valida
+ | `terminal.hyperlinks` | `boolean \| "auto"` | `"auto"` | Override OSC 8 hyperlink detection. |
+ | `terminal.images` | `"kitty" \| "iterm2" \| "auto" \| false` | `"auto"` | Override inline-image protocol detection. |
+ | `terminal.trueColor` | `boolean \| "auto"` | `"auto"` | Override true-color detection. |
++| `terminal.rtl.enabled` | boolean | `true` | Reorder right-to-left text for display so Arabic, Hebrew and Persian read in visual order. Copy, search, caret positions and wrapping stay logical. Set `false` to render lines exactly as they are written. |
++| `terminal.rtl.align` | boolean | `true` | Put a line against the edge its dominant script reads from: Arabic, Hebrew and Persian lines go to the right, English stays on the left, and a mixed line follows whichever script has more strong characters. List markers, blockquote bars and table columns follow the same edge. Set `false` to keep everything at the left edge. |
+ | `images.autoResize` | boolean | `true` | Resize images to at most 2000 by 2000 pixels before sending them to a model. |
+ | `images.blockImages` | boolean | `false` | Prevent images from being sent to models. |
+ | `markdown.codeBlockIndent` | string | `"  "` | Prefix used to indent rendered code blocks. |
+diff --git a/packages/coding-agent/schemas/settings.schema.json b/packages/coding-agent/schemas/settings.schema.json
+index 4d6c23a..38e9c8b 100644
+--- a/packages/coding-agent/schemas/settings.schema.json
++++ b/packages/coding-agent/schemas/settings.schema.json
+@@ -449,6 +449,21 @@
+               "const": "auto"
+             }
+           ]
++        },
++        "rtl": {
++          "type": "object",
++          "properties": {
++            "enabled": {
++              "type": "boolean",
++              "description": "Reorder right-to-left text for display so Arabic, Hebrew and Persian render in visual order.",
++              "default": true
++            },
++            "align": {
++              "type": "boolean",
++              "description": "Put a line against the edge its dominant script reads from: Arabic, Hebrew and Persian lines go right, English stays left, and a mixed line follows whichever script has more strong characters.",
++              "default": true
++            }
++          }
+         }
+       }
+     },
+diff --git a/packages/coding-agent/src/core/settings-defaults.ts b/packages/coding-agent/src/core/settings-defaults.ts
+index 1f90280..0091862 100644
+--- a/packages/coding-agent/src/core/settings-defaults.ts
++++ b/packages/coding-agent/src/core/settings-defaults.ts
+@@ -37,6 +37,10 @@ export const SETTINGS_DEFAULTS = {
+ 		imageWidthCells: 60,
+ 		clearOnShrink: false,
+ 		showTerminalProgress: false,
++		rtl: {
++			enabled: true,
++			align: true,
++		},
+ 	},
+ 	images: {
+ 		autoResize: true,
+diff --git a/packages/coding-agent/src/core/settings-manager.ts b/packages/coding-agent/src/core/settings-manager.ts
+index ad8b82c..e634555 100644
+--- a/packages/coding-agent/src/core/settings-manager.ts
++++ b/packages/coding-agent/src/core/settings-manager.ts
+@@ -1244,6 +1244,40 @@ export class SettingsManager {
+ 		return this.settings.terminal?.showTerminalProgress ?? SETTINGS_DEFAULTS.terminal.showTerminalProgress;
+ 	}
+ 
++	getRtlSettings(): { enabled: boolean; align: boolean } {
++		const rtl = this.settings.terminal?.rtl;
++		const enabled = rtl?.enabled ?? SETTINGS_DEFAULTS.terminal.rtl.enabled;
++		return {
++			enabled: enabled && process.env.PI_RTL !== "0",
++			align: rtl?.align ?? SETTINGS_DEFAULTS.terminal.rtl.align,
++		};
++	}
++
++	setRtlEnabled(enabled: boolean): void {
++		if (!this.globalSettings.terminal) {
++			this.globalSettings.terminal = {};
++		}
++		if (!this.globalSettings.terminal.rtl) {
++			this.globalSettings.terminal.rtl = {};
++		}
++		this.globalSettings.terminal.rtl.enabled = enabled;
++		this.globalSettings.terminal.rtl.enabled = enabled;
++		this.markModified("terminal", "rtl");
++		this.save();
++	}
++
++	setRtlAlign(enabled: boolean): void {
++		if (!this.globalSettings.terminal) {
++			this.globalSettings.terminal = {};
++		}
++		if (!this.globalSettings.terminal.rtl) {
++			this.globalSettings.terminal.rtl = {};
++		}
++		this.globalSettings.terminal.rtl.align = enabled;
++		this.markModified("terminal", "rtl");
++		this.save();
++	}
++
+ 	setShowTerminalProgress(enabled: boolean): void {
+ 		if (!this.globalSettings.terminal) {
+ 			this.globalSettings.terminal = {};
+diff --git a/packages/coding-agent/src/core/settings-schema.ts b/packages/coding-agent/src/core/settings-schema.ts
+index b17bab5..5509945 100644
+--- a/packages/coding-agent/src/core/settings-schema.ts
++++ b/packages/coding-agent/src/core/settings-schema.ts
+@@ -101,6 +101,24 @@ const TerminalSettingsSchema = Type.Object({
+ 		Type.Union([Type.Literal("kitty"), Type.Literal("iterm2"), Type.Literal("auto"), Type.Literal(false)]),
+ 	),
+ 	trueColor: Type.Optional(Type.Union([Type.Boolean(), Type.Literal("auto")])),
++	rtl: Type.Optional(
++		Type.Object({
++			enabled: Type.Optional(
++				Type.Boolean({
++					description:
++						"Reorder right-to-left text for display so Arabic, Hebrew and Persian render in visual order.",
++					default: SETTINGS_DEFAULTS.terminal.rtl.enabled,
++				}),
++			),
++			align: Type.Optional(
++				Type.Boolean({
++					description:
++						"Put a line against the edge its dominant script reads from: Arabic, Hebrew and Persian lines go right, English stays left, and a mixed line follows whichever script has more strong characters.",
++					default: SETTINGS_DEFAULTS.terminal.rtl.align,
++				}),
++			),
++		}),
++	),
+ });
+ 
+ const ImageSettingsSchema = Type.Object({
+diff --git a/packages/coding-agent/src/modes/interactive/components/settings-selector.ts b/packages/coding-agent/src/modes/interactive/components/settings-selector.ts
+index e0cca78..6ff0033 100644
+--- a/packages/coding-agent/src/modes/interactive/components/settings-selector.ts
++++ b/packages/coding-agent/src/modes/interactive/components/settings-selector.ts
+@@ -95,6 +95,8 @@ export interface SettingsConfig {
+ 	defaultProjectTrust: DefaultProjectTrust;
+ 	clearOnShrink: boolean;
+ 	showTerminalProgress: boolean;
++	rtlEnabled: boolean;
++	rtlAlign: boolean;
+ 	tuiMode: TuiMode;
+ 	fullscreenExitOutput: FullscreenExitOutput;
+ 	fullscreenScrollbar: ScrollViewScrollbar;
+@@ -135,6 +137,8 @@ export interface SettingsCallbacks {
+ 	onDefaultProjectTrustChange: (defaultProjectTrust: DefaultProjectTrust) => void;
+ 	onClearOnShrinkChange: (enabled: boolean) => void;
+ 	onShowTerminalProgressChange: (enabled: boolean) => void;
++	onRtlEnabledChange: (enabled: boolean) => void;
++	onRtlAlignChange: (enabled: boolean) => void;
+ 	onTuiModeChange: (mode: TuiMode) => void;
+ 	onFullscreenExitOutputChange: (output: FullscreenExitOutput) => void;
+ 	onFullscreenScrollbarChange: (mode: ScrollViewScrollbar) => void;
+@@ -875,6 +879,24 @@ export class SettingsSelectorComponent extends Container {
+ 			values: ["true", "false"],
+ 		});
+ 
++		// Bidirectional text toggles (insert after terminal-progress)
++		const terminalProgressIndex = items.findIndex((item) => item.id === "terminal-progress");
++		items.splice(terminalProgressIndex + 1, 0, {
++			id: "rtl-reorder",
++			label: "Bidirectional text",
++			description: "Reorder right-to-left text for display; copy, search and caret stay logical",
++			currentValue: config.rtlEnabled ? "true" : "false",
++			values: ["true", "false"],
++		});
++		const rtlIndex = items.findIndex((item) => item.id === "rtl-reorder");
++		items.splice(rtlIndex + 1, 0, {
++			id: "rtl-align",
++			label: "Align to the reading edge",
++			description: "Arabic, Hebrew and Persian lines, markers, quote bars and tables go to the right; English stays left",
++			currentValue: config.rtlAlign ? "true" : "false",
++			values: ["true", "false"],
++		});
++
+ 		// Add borders
+ 		this.addChild(new DynamicBorder());
+ 
+@@ -975,6 +997,12 @@ export class SettingsSelectorComponent extends Container {
+ 					case "terminal-progress":
+ 						callbacks.onShowTerminalProgressChange(newValue === "true");
+ 						break;
++					case "rtl-reorder":
++						callbacks.onRtlEnabledChange(newValue === "true");
++						break;
++					case "rtl-align":
++						callbacks.onRtlAlignChange(newValue === "true");
++						break;
+ 					case "tui-mode":
+ 						callbacks.onTuiModeChange(newValue as TuiMode);
+ 						break;
+diff --git a/packages/coding-agent/src/modes/interactive/interactive-mode.ts b/packages/coding-agent/src/modes/interactive/interactive-mode.ts
+index e24d150..f1857ea 100644
+--- a/packages/coding-agent/src/modes/interactive/interactive-mode.ts
++++ b/packages/coding-agent/src/modes/interactive/interactive-mode.ts
+@@ -34,6 +34,7 @@ import {
+ 	CombinedAutocompleteProvider,
+ 	type Component,
+ 	Container,
++	configureBidi,
+ 	fuzzyFilter,
+ 	getCapabilities,
+ 	hyperlink,
+@@ -610,6 +611,7 @@ export class InteractiveMode {
+ 	constructor(runtimeHost: AgentSessionRuntime, options: InteractiveModeOptions = {}) {
+ 		this.runtimeHost = runtimeHost;
+ 		setCapabilityOverrides(this.settingsManager.getTerminalCapabilityOverrides());
++		configureBidi(this.settingsManager.getRtlSettings());
+ 		const tuiMode = options.tuiMode ?? this.settingsManager.getTuiMode();
+ 		this.options = { ...options, tuiMode };
+ 		this.autoTrustOnReloadCwd = options.autoTrustOnReloadCwd;
+@@ -4919,6 +4921,8 @@ export class InteractiveMode {
+ 					quietStartup: this.settingsManager.getQuietStartup(),
+ 					clearOnShrink: this.settingsManager.getClearOnShrink(),
+ 					showTerminalProgress: this.settingsManager.getShowTerminalProgress(),
++					rtlEnabled: this.settingsManager.getRtlSettings().enabled,
++					rtlAlign: this.settingsManager.getRtlSettings().align,
+ 					tuiMode: this.ui.mode,
+ 					fullscreenExitOutput: this.settingsManager.getFullscreenExitOutput(),
+ 					fullscreenScrollbar: this.settingsManager.getFullscreenScrollbar(),
+@@ -5077,6 +5081,18 @@ export class InteractiveMode {
+ 					onShowTerminalProgressChange: (enabled) => {
+ 						this.settingsManager.setShowTerminalProgress(enabled);
+ 					},
++					onRtlEnabledChange: (enabled) => {
++						this.settingsManager.setRtlEnabled(enabled);
++						configureBidi(this.settingsManager.getRtlSettings());
++						this.ui.invalidate();
++						this.ui.requestRender();
++					},
++					onRtlAlignChange: (enabled) => {
++						this.settingsManager.setRtlAlign(enabled);
++						configureBidi(this.settingsManager.getRtlSettings());
++						this.ui.invalidate();
++						this.ui.requestRender();
++					},
+ 					onTuiModeChange: (mode) => {
+ 						if (!this.switchTuiMode(mode)) {
+ 							selector?.getSettingsList().updateValue("tui-mode", this.ui.mode);
+diff --git a/packages/coding-agent/test/rtl-settings.test.ts b/packages/coding-agent/test/rtl-settings.test.ts
+new file mode 100644
+index 0000000..b2c550c
+--- /dev/null
++++ b/packages/coding-agent/test/rtl-settings.test.ts
+@@ -0,0 +1,50 @@
++import { mkdirSync, readFileSync, rmSync, writeFileSync } from "fs";
++import { join } from "path";
++import { afterEach, beforeEach, describe, expect, it } from "vitest";
++import { SettingsManager } from "../src/core/settings-manager.ts";
++
++describe("RTL settings", () => {
++	const testDir = join(process.cwd(), "test-rtl-tmp");
++	const agentDir = join(testDir, "agent");
++
++	beforeEach(() => {
++		rmSync(testDir, { recursive: true, force: true });
++		mkdirSync(agentDir, { recursive: true });
++	});
++
++	afterEach(() => {
++		rmSync(testDir, { recursive: true, force: true });
++	});
++
++	it("defaults to reordering on and edge alignment on", () => {
++		const manager = SettingsManager.create(testDir, agentDir);
++		expect(manager.getRtlSettings()).toEqual({ enabled: true, align: true });
++	});
++
++	it("persists toggles written from the settings list", async () => {
++		const manager = SettingsManager.create(testDir, agentDir);
++		manager.setRtlAlign(true);
++		manager.setRtlEnabled(false);
++		await manager.flush();
++
++		const written = JSON.parse(readFileSync(join(agentDir, "settings.json"), "utf8"));
++		expect(written.terminal.rtl).toEqual({ enabled: false, align: true });
++	});
++
++	it("PI_RTL=0 turns reordering off whatever the settings say", () => {
++		const manager = SettingsManager.create(testDir, agentDir);
++		manager.setRtlEnabled(true);
++		process.env.PI_RTL = "0";
++		expect(manager.getRtlSettings().enabled).toBe(false);
++		delete process.env.PI_RTL;
++	});
++
++	it("reads a settings file written by hand", () => {
++		writeFileSync(
++			join(agentDir, "settings.json"),
++			JSON.stringify({ terminal: { rtl: { enabled: false, align: true } } }),
++		);
++		const manager = SettingsManager.create(testDir, agentDir);
++		expect(manager.getRtlSettings()).toEqual({ enabled: false, align: true });
++	});
++});
+diff --git a/packages/tui/README.md b/packages/tui/README.md
+index 1150ebc..3252a90 100644
+--- a/packages/tui/README.md
++++ b/packages/tui/README.md
+@@ -14,6 +14,34 @@ Minimal terminal UI framework with differential rendering and synchronized outpu
+ - **Built-in Components**: Text, TruncatedText, Input, Editor, Markdown, Loader, SelectList, SettingsList, MouseRegion, Spacer, Image, Box, Container, VStack, HStack, ScrollView
+ - **Inline Images**: Renders images in terminals that support Kitty or iTerm2 graphics protocols
+ - **Autocomplete Support**: File paths and slash commands
++- **Bidirectional Text**: Right-to-left lines are reordered for display while text stays logical
++
++## Bidirectional (RTL) Text
++
++Terminals such as Windows Terminal paint cells in the order the program writes them; they do not
++implement the Unicode Bidirectional Algorithm. A line stored in logical order - the order every
++editor, clipboard and search uses - therefore appears mirrored. `src/bidi.ts` fixes that at the
++painting layer:
++
++- `reorderLine(line)` converts one rendered line from logical order into visual order, using
++  `bidi-js` for the embedding levels and reversing runs per UAX #9 L2. Graphemes are the unit, so
++  a letter and its combining marks travel as one cell; brackets are mirrored; leading and trailing
++  whitespace is anchored so indentation and padding do not move.
++- `reorderLineWithCaret(line, caretOffset)` models the caret as a zero-width cell inside its run so
++  it lands on the correct visual side of the grapheme it precedes. `stepCaretVisual()` maps an
++  arrow-key step in visual direction back to a logical offset.
++- Only the string written to the terminal changes. State, caret positions, wrapping, selection and
++  copy stay logical.
++- Lines without a strong RTL character return unchanged, byte for byte, so English rendering is
++  identical to before. Styling and OSC 8 hyperlinks travel with their grapheme; positional escapes
++  (cursor movement, the editor cursor marker) are never moved.
++- `configureBidi({ enabled, align })` controls it. `enabled` defaults to true; `align` (right-align
++  RTL lines) defaults to false because alignment touches padding, the scrollbar gutter and overlay
++  compositing.
++
++Tests: `test/bidi.test.ts` (engine, including a check against `bidi-js`'s own reordering),
++`test/bidi-markdown.test.ts`, `test/bidi-text.test.ts`, `test/bidi-editor.test.ts` (caret and
++arrow keys through the virtual terminal).
+ 
+ ## Quick Start
+ 
+diff --git a/packages/tui/package.json b/packages/tui/package.json
+index 31dc474..aa4512c 100644
+--- a/packages/tui/package.json
++++ b/packages/tui/package.json
+@@ -52,6 +52,7 @@
+ 	},
+ 	"types": "./dist/index.d.ts",
+ 	"dependencies": {
++		"bidi-js": "1.1.0",
+ 		"get-east-asian-width": "1.6.0",
+ 		"marked": "18.0.11",
+ 		"marked-cjk-friendly": "0.1.2"
+diff --git a/packages/tui/src/bidi.ts b/packages/tui/src/bidi.ts
+new file mode 100644
+index 0000000..2e92c88
+--- /dev/null
++++ b/packages/tui/src/bidi.ts
+@@ -0,0 +1,460 @@
++import bidiModule, { type Bidi } from "bidi-js";
++import { extractAnsiCode, getGraphemeSegmenter, visibleWidth } from "./utils.ts";
++
++/**
++ * Bidirectional layout for terminal output.
++ *
++ * Problem: terminals such as Windows Terminal paint cells in the order the
++ * program writes them. They do not implement the Unicode Bidirectional
++ * Algorithm (UAX #9), so text stored in logical order - the order every
++ * program, editor and clipboard keeps it in - appears mirrored on screen:
++ * "مرحبا" written cell by cell left to right reads backwards.
++ *
++ * Solution: keep the logical text untouched everywhere (caret positions,
++ * selection, copy, wrapping and search all stay logical) and reorder only the
++ * string written to the terminal. `reorderLine` turns one rendered line from
++ * logical order into visual order. Cell widths do not change - an Arabic
++ * grapheme occupies one cell in either order - so every column-based
++ * calculation in the renderer still works on the reordered line.
++ *
++ * Reordering works on grapheme clusters, not code units: an Arabic letter and
++ * its combining marks travel as one cell. Bracket mirroring is part of UAX #9
++ * and is applied here because the terminal does not do it.
++ */
++
++// bidi-js ships a factory as its only export; its type declaration is not
++// resolved as callable by tsc, so the call is cast.
++const bidi: Bidi = (bidiModule as unknown as () => Bidi)();
++
++// SGR styling and OSC 8 hyperlinks can travel with a grapheme. Cursor position
++// codes and the editor cursor marker are positional: moving them would put the
++// caret or the padding in the wrong column.
++const movableEscapeRegex = /^(\x1b\[[0-9;]*m|\x1b\]8;[^;]*;[^\x07\x1b]*(?:\x07|\x1b\\))$/;
++
++export type BaseDirection = "ltr" | "rtl";
++
++export interface BidiSettings {
++	/** Reorder RTL lines into visual order. Off makes rendering exactly what it was before. */
++	enabled: boolean;
++	/** Move a line to the side its dominant script reads from. Off by default: alignment touches padding, the scrollbar gutter and overlay compositing. */
++	align: boolean;
++}
++
++const settings: BidiSettings = { enabled: true, align: false };
++
++export function configureBidi(next: Partial<BidiSettings>): void {
++	Object.assign(settings, next);
++}
++
++export function getBidiSettings(): BidiSettings {
++	return settings;
++}
++
++/**
++ * Does this text contain a strong right-to-left character?
++ *
++ * Strong means the character itself carries a direction: Arabic and Hebrew
++ * letters do, their combining marks do not. A Latin string carrying an Arabic
++ * vowel mark is therefore still left-to-right.
++ */
++// Arabic, Hebrew and the other RTL blocks in the Unicode ranges that carry a
++// strong RTL direction. Cheaper than segmenting every line of a mostly-ASCII
++// transcript; anything outside these ranges is checked by the bidi table below.
++const rtlScriptRegex = /[\u0590-\u06FF\u070C-\u0740\u0850-\u085F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/;
++
++export function hasStrongRtl(text: string): boolean {
++	if (!rtlScriptRegex.test(text)) return false;
++	for (const { segment } of getGraphemeSegmenter().segment(text)) {
++		const type = bidi.getBidiCharTypeName(segment[0] ?? "");
++		if (type === "R" || type === "AL") return true;
++	}
++	return false;
++}
++
++/**
++ * Base direction of a paragraph by UAX #9 P2/P3: the first strong character
++ * decides. A forced direction wins over detection.
++ */
++export function detectBaseDirection(text: string, forced?: BaseDirection): BaseDirection {
++	if (forced) return forced;
++	return bidi.getEmbeddingLevels(text, "auto").paragraphs[0].level % 2 === 1 ? "rtl" : "ltr";
++}
++
++/**
++ * Which edge a line should sit against.
++ *
++ * Direction tells how the characters inside a line are ordered; alignment is a
++ * separate question. A line is aligned with the script that dominates it:
++ * English stays at the left edge, Arabic goes to the right edge, and a mixed
++ * line - "npm install ثم build" - follows whichever script has more strong
++ * characters. When the two scripts tie, the first strong character decides, the
++ * same rule UAX #9 uses for direction.
++ *
++ * Undefined means the line has no RTL content at all, so nothing moves.
++ */
++export function dominantDirection(text: string): BaseDirection | undefined {
++	if (!hasStrongRtl(text)) return undefined;
++
++	let rtlCount = 0;
++	let ltrCount = 0;
++	for (const { segment } of getGraphemeSegmenter().segment(text)) {
++		const type = bidi.getBidiCharTypeName(segment[0] ?? "");
++		if (type === "R" || type === "AL") rtlCount++;
++		else if (type === "L") ltrCount++;
++	}
++
++	if (rtlCount === 0) return undefined;
++	if (rtlCount > ltrCount) return "rtl";
++	if (ltrCount > rtlCount) return "ltr";
++	return detectBaseDirection(text);
++}
++
++// The styling that applies to a grapheme, tracked as attributes rather than as a
++// joined string of codes. Reordering a line has to close the attributes that end
++// and open the ones that start; emitting a bare `\x1b[0m` would also clear the
++// background the caller wraps the line in, which leaves the padding black.
++interface SgrState {
++	fg: string;
++	bg: string;
++	bold: boolean;
++	dim: boolean;
++	italic: boolean;
++	underline: boolean;
++	inverse: boolean;
++	link: string;
++}
++
++const defaultState: SgrState = {
++	fg: "",
++	bg: "",
++	bold: false,
++	dim: false,
++	italic: false,
++	underline: false,
++	inverse: false,
++	link: "",
++};
++
++function applySgr(state: SgrState, code: string): SgrState {
++	const next = { ...state };
++	// `ESC[m` is the same as `ESC[0m`: an empty parameter list means a full reset.
++	const tokens = code.slice(2, -1).split(";");
++	if (tokens.length === 1 && tokens[0] === "") tokens[0] = "0";
++
++	for (let i = 0; i < tokens.length; i++) {
++		const token = tokens[i];
++		if (!token) continue;
++		const value = Number(token);
++
++		if (value === 0) {
++			next.fg = "";
++			next.bg = "";
++			next.bold = false;
++			next.dim = false;
++			next.italic = false;
++			next.underline = false;
++			next.inverse = false;
++		} else if (value === 1) next.bold = true;
++		else if (value === 2) next.dim = true;
++		else if (value === 3) next.italic = true;
++		else if (value === 4) next.underline = true;
++		else if (value === 7) next.inverse = true;
++		else if (value === 22) next.bold = false;
++		else if (value === 23) next.italic = false;
++		else if (value === 24) next.underline = false;
++		else if (value === 27) next.inverse = false;
++		else if (value === 39) next.fg = "";
++		else if (value === 49) next.bg = "";
++		else if (value >= 30 && value <= 37) next.fg = code;
++		else if (value >= 40 && value <= 47) next.bg = code;
++		else if (value === 38 || value === 48) {
++			const full = `\x1b[${tokens.slice(i).join(";")}m`;
++			if (tokens[i + 1] === "5") i += 2;
++			else if (tokens[i + 1] === "2") i += 4;
++			else continue;
++			if (value === 38) next.fg = full;
++			else next.bg = full;
++		}
++	}
++
++	return next;
++}
++
++// Codes that turn an attribute off are specific to it, so the background the
++// caller wrapped the line in survives the transition.
++function sgrTransition(prev: SgrState, next: SgrState): string {
++	let out = "";
++	if (prev.bg !== next.bg) {
++		if (prev.bg) out += "\x1b[49m";
++		if (next.bg) out += next.bg;
++	}
++	if (prev.fg !== next.fg) {
++		if (prev.fg) out += "\x1b[39m";
++		if (next.fg) out += next.fg;
++	}
++	if (prev.bold !== next.bold) out += next.bold ? "\x1b[1m" : "\x1b[22m";
++	if (prev.dim !== next.dim) out += next.dim ? "\x1b[2m" : "\x1b[22m";
++	if (prev.italic !== next.italic) out += next.italic ? "\x1b[3m" : "\x1b[23m";
++	if (prev.underline !== next.underline) out += next.underline ? "\x1b[4m" : "\x1b[24m";
++	if (prev.inverse !== next.inverse) out += next.inverse ? "\x1b[7m" : "\x1b[27m";
++	if (prev.link !== next.link) out += next.link ? `\x1b]8;;${next.link}\x07` : "\x1b]8;;\x07";
++	return out;
++}
++
++interface Cell {
++	grapheme: string;
++	state: SgrState;
++	level: number;
++	/** Bounds of the grapheme in the logical line, in code units. */
++	logicalStart: number;
++	logicalEnd: number;
++	isCaret?: boolean;
++}
++
++/**
++ * Split a rendered line into grapheme cells carrying the styling that applies
++ * to them. Returns an empty list when the line contains positional escapes
++ * that must not move, so the caller leaves the line untouched.
++ */
++function parseCells(line: string): { cells: Cell[]; trailing: string } {
++	const cells: Cell[] = [];
++	let state: SgrState = defaultState;
++	// Escape codes seen since the last grapheme. At the end of the line these are
++	// the closing codes the renderer wrote, and they belong at the end of the line.
++	let pendingCodes = "";
++
++	let index = 0;
++	while (index < line.length) {
++		const ansi = extractAnsiCode(line, index);
++		if (ansi) {
++			if (!movableEscapeRegex.test(ansi.code)) return { cells: [], trailing: "" };
++			if (ansi.code.startsWith("\x1b]8;")) {
++				const body = ansi.code.slice(4, ansi.code.endsWith("\x07") ? -1 : -2);
++				state = { ...state, link: body.split(";")[1] ?? "" };
++			} else {
++				state = applySgr(state, ansi.code);
++			}
++			pendingCodes += ansi.code;
++			index += ansi.length;
++			continue;
++		}
++		let end = index;
++		while (end < line.length && !extractAnsiCode(line, end)) end++;
++		let cursor = index;
++		for (const { segment } of getGraphemeSegmenter().segment(line.slice(index, end))) {
++			cells.push({
++				grapheme: segment,
++				state,
++				level: 0,
++				logicalStart: cursor,
++				logicalEnd: cursor + segment.length,
++			});
++			pendingCodes = "";
++			cursor += segment.length;
++		}
++		index = end;
++	}
++
++	return { cells, trailing: pendingCodes };
++}
++
++/**
++ * Resolve embedding levels and return the [maxLevel, minOddLevel] range to
++ * reverse. Undefined means the line has no right-to-left run.
++ */
++function resolveLevels(cells: Cell[], logical: string, forced?: BaseDirection): [number, number] | undefined {
++	const levels = bidi.getEmbeddingLevels(logical, forced ?? "auto");
++	const paragraph = levels.paragraphs[0];
++
++	let offset = 0;
++	for (const cell of cells) {
++		cell.level = levels.levels[offset];
++		offset += cell.grapheme.length;
++	}
++
++	// Leading and trailing whitespace stay where they are. UAX #9 L1.4 resets
++	// trailing whitespace to the paragraph level so it does not jump to the
++	// other end of the line; leading whitespace needs the same anchor because
++	// in a terminal the indent is layout produced by the renderer, not content
++	// the reader is reading.
++	const anchorLevel = paragraph.level % 2 === 1 ? 0 : paragraph.level;
++	let first = 0;
++	while (first < cells.length && /^\s+$/.test(cells[first].grapheme)) cells[first++].level = anchorLevel;
++	let last = cells.length - 1;
++	while (last >= first && /^\s+$/.test(cells[last].grapheme)) cells[last--].level = anchorLevel;
++
++	let maxLevel = 0;
++	let minOddLevel = Infinity;
++	for (const cell of cells) {
++		if (cell.level > maxLevel) maxLevel = cell.level;
++		if (cell.level % 2 === 1 && cell.level < minOddLevel) minOddLevel = cell.level;
++	}
++	if (minOddLevel === Infinity) return undefined;
++
++	return [maxLevel, minOddLevel];
++}
++
++/** UAX #9 L2: reverse every run at each level, from the top level down. */
++function reverseRuns(cells: Cell[], maxLevel: number, minOddLevel: number): void {
++	for (let level = maxLevel; level >= minOddLevel; level--) {
++		let i = 0;
++		while (i < cells.length) {
++			if (cells[i].level >= level) {
++				const runStart = i;
++				while (i + 1 < cells.length && cells[i + 1].level >= level) i++;
++				if (i > runStart) {
++					const run = cells.slice(runStart, i + 1);
++					for (let k = 0; k < run.length; k++) {
++						cells[runStart + k] = run[run.length - 1 - k];
++					}
++				}
++			}
++			i++;
++		}
++	}
++}
++
++function mirror(grapheme: string): string {
++	let mirrored = "";
++	for (const char of grapheme) {
++		mirrored += bidi.getMirroredCharacter(char) ?? char;
++	}
++	return mirrored;
++}
++
++function emitCells(cells: Cell[], trailing: string): string {
++	let out = "";
++	let emittedState: SgrState | undefined;
++
++	for (const cell of cells) {
++		if (cell.isCaret) continue;
++		out += sgrTransition(emittedState ?? defaultState, cell.state);
++		emittedState = cell.state;
++		out += cell.level % 2 === 1 ? mirror(cell.grapheme) : cell.grapheme;
++	}
++	return out + trailing;
++}
++
++/**
++ * Reorder one rendered line into visual order, keeping each grapheme's styling
++ * with it. Lines with no RTL content come back unchanged, so English rendering
++ * is bit for bit what it was before.
++ */
++export function reorderLine(line: string, forced?: BaseDirection): string {
++	if (!settings.enabled || !hasStrongRtl(line) || line.includes("\n")) return line;
++
++	const parsed = parseCells(line);
++	if (parsed.cells.length === 0) return line;
++
++	const range = resolveLevels(parsed.cells, parsed.cells.map((cell) => cell.grapheme).join(""), forced);
++	if (!range) return line;
++
++	reverseRuns(parsed.cells, range[0], range[1]);
++	return emitCells(parsed.cells, parsed.trailing);
++}
++
++/**
++ * A caret is not a character: it is a boundary between two graphemes. Model it
++ * as a zero-width cell in the run it sits in so the reversal moves it with the
++ * text around it.
++ */
++function insertCaretCell(cells: Cell[], boundary: number): Cell[] {
++	const withCaret = [...cells];
++	const level = cells[boundary]?.level ?? cells[boundary - 1]?.level ?? 0;
++	const start = cells[boundary]?.logicalStart ?? cells[boundary - 1]?.logicalEnd ?? 0;
++	withCaret.splice(boundary, 0, {
++		grapheme: "",
++		state: defaultState,
++		level,
++		logicalStart: start,
++		logicalEnd: start,
++		isCaret: true,
++	});
++	return withCaret;
++}
++
++/** Boundary index of the grapheme that contains or follows a code-unit offset. */
++function boundaryAt(cells: Cell[], offset: number): number {
++	for (let i = 0; i < cells.length; i++) {
++		if (cells[i].logicalStart >= offset) return i;
++		if (cells[i].logicalEnd >= offset) return i + 1;
++	}
++	return cells.length;
++}
++
++/**
++ * Reorder a line and report where the caret lands in it. Returns undefined when
++ * the line needs no reordering.
++ */
++export function reorderLineWithCaret(
++	line: string,
++	caretOffset: number,
++	forced?: BaseDirection,
++): { line: string; caretOffset: number } | undefined {
++	if (!settings.enabled || !hasStrongRtl(line) || line.includes("\n")) return undefined;
++
++	const parsed = parseCells(line);
++	if (parsed.cells.length === 0) return undefined;
++
++	const range = resolveLevels(parsed.cells, line, forced);
++	if (!range) return undefined;
++
++	const withCaret = insertCaretCell(parsed.cells, boundaryAt(parsed.cells, caretOffset));
++	reverseRuns(withCaret, range[0], range[1]);
++
++	let out = "";
++	let emittedState: SgrState | undefined;
++	let caretIndex = 0;
++	for (const cell of withCaret) {
++		if (cell.isCaret) {
++			caretIndex = out.length;
++			continue;
++		}
++		out += sgrTransition(emittedState ?? defaultState, cell.state);
++		emittedState = cell.state;
++		out += cell.level % 2 === 1 ? mirror(cell.grapheme) : cell.grapheme;
++	}
++	return { line: out + parsed.trailing, caretOffset: caretIndex };
++}
++
++/**
++
++/**
++ * Where the caret goes when an arrow key moves it one cell in visual direction.
++ * Undefined for lines with no RTL (the caller keeps its logical step) or when
++ * the caret is already at the edge of the line.
++ */
++export function stepCaretVisual(
++	line: string,
++	caretOffset: number,
++	direction: 1 | -1,
++	forced?: BaseDirection,
++): number | undefined {
++	if (!settings.enabled || !hasStrongRtl(line) || line.includes("\n")) return undefined;
++
++	const parsed = parseCells(line);
++	if (parsed.cells.length === 0) return undefined;
++
++	const range = resolveLevels(parsed.cells, line, forced);
++	if (!range) return undefined;
++
++	const withCaret = insertCaretCell(parsed.cells, boundaryAt(parsed.cells, caretOffset));
++	reverseRuns(withCaret, range[0], range[1]);
++
++	const caretIndex = withCaret.findIndex((cell) => cell.isCaret);
++	const crossed = withCaret[caretIndex + direction];
++	// The caret is already at the edge of the painted line: it cannot go further.
++	if (!crossed || crossed.isCaret) return caretOffset;
++
++	// The caret crossed one grapheme. In an RTL run the grapheme it stepped over
++	// sits on the other side of the caret, so the boundary moves to the start of
++	// that grapheme; in an LTR run it moves to the end.
++	const rtlRun = crossed.level % 2 === 1;
++	return (direction === 1) === rtlRun ? crossed.logicalStart : crossed.logicalEnd;
++}
++
++/** Pad a line on the left so it ends at the right edge of the column. */
++export function alignRight(line: string, width: number): string {
++	const padding = width - visibleWidth(line);
++	return padding > 0 ? " ".repeat(padding) + line : line;
++}
+diff --git a/packages/tui/src/components/editor.ts b/packages/tui/src/components/editor.ts
+index 5d453e3..8ea93a2 100644
+--- a/packages/tui/src/components/editor.ts
++++ b/packages/tui/src/components/editor.ts
+@@ -1,4 +1,5 @@
+ import type { AutocompleteProvider, AutocompleteSuggestions } from "../autocomplete.ts";
++import { dominantDirection, getBidiSettings, hasStrongRtl, reorderLine, reorderLineWithCaret, stepCaretVisual } from "../bidi.ts";
+ import { getKeybindings } from "../keybindings.ts";
+ import { decodePrintableKey, matchesKey } from "../keys.ts";
+ import { KillRing } from "../kill-ring.ts";
+@@ -570,14 +571,23 @@ export class Editor implements Component, Focusable {
+ 		const emitCursorMarker = this.focused;
+ 
+ 		for (const layoutLine of visibleLines) {
+-			let displayText = layoutLine.text;
++			// The editor keeps logical order in state.lines; painting reorders RTL lines
++			// and moves the caret to the boundary it precedes in visual order.
++			const painted = hasStrongRtl(layoutLine.text)
++				? layoutLine.hasCursor && layoutLine.cursorPos !== undefined
++					? reorderLineWithCaret(layoutLine.text, layoutLine.cursorPos)
++					: { line: reorderLine(layoutLine.text), caretOffset: undefined }
++				: undefined;
++
++			let displayText = painted ? painted.line : layoutLine.text;
++			let caretPos = painted ? painted.caretOffset : layoutLine.cursorPos;
+ 			let lineVisibleWidth = visibleWidth(layoutLine.text);
+ 			let cursorInPadding = false;
+ 
+ 			// Add cursor if this line has it
+-			if (layoutLine.hasCursor && layoutLine.cursorPos !== undefined) {
+-				const before = displayText.slice(0, layoutLine.cursorPos);
+-				const after = displayText.slice(layoutLine.cursorPos);
++			if (layoutLine.hasCursor && caretPos !== undefined) {
++				const before = displayText.slice(0, caretPos);
++				const after = displayText.slice(caretPos);
+ 
+ 				// Hardware cursor marker (zero-width, emitted before fake cursor for IME positioning)
+ 				const marker = emitCursorMarker ? CURSOR_MARKER : "";
+@@ -604,11 +614,18 @@ export class Editor implements Component, Focusable {
+ 			}
+ 
+ 			// Calculate padding based on actual visible width
+-			const padding = " ".repeat(Math.max(0, contentWidth - lineVisibleWidth));
++			const paddingWidth = Math.max(0, contentWidth - lineVisibleWidth);
+ 			const lineRightPadding = cursorInPadding ? rightPadding.slice(1) : rightPadding;
+ 
++			// A line whose script reads right to left sits against the right edge of the
++			// column, so the empty space goes on its left instead of its right. The
++			// caret marker travels with the text, so the hardware cursor still lands on
++			// the grapheme the caret precedes.
++			const padding = " ".repeat(paddingWidth);
++			const hugRight = getBidiSettings().align && dominantDirection(layoutLine.text) === "rtl";
++
+ 			// Render the line (no side borders, just horizontal lines above and below)
+-			result.push(`${leftPadding}${displayText}${padding}${lineRightPadding}`);
++			result.push(`${leftPadding}${hugRight ? padding : ""}${displayText}${hugRight ? "" : padding}${lineRightPadding}`);
+ 		}
+ 
+ 		// Render bottom border (with scroll indicator if more content below)
+@@ -667,7 +684,14 @@ export class Editor implements Component, Focusable {
+ 		const chunk = logicalLine.slice(visualLine.startCol, chunkEnd);
+ 		const maxPadding = Math.max(0, Math.floor((event.width - 1) / 2));
+ 		const paddingX = Math.min(this.paddingX, maxPadding);
+-		const targetColumn = Math.max(0, event.x - paddingX);
++		// A right-aligned RTL line starts one padding-width further in, so the click
++		// column has to be measured from the edge the text actually starts at.
++		const contentWidth = Math.max(1, event.width - paddingX * 2);
++		const leadingPad =
++			getBidiSettings().align && dominantDirection(logicalLine) === "rtl"
++				? Math.max(0, contentWidth - visibleWidth(chunk))
++				: 0;
++		const targetColumn = Math.max(0, event.x - paddingX - leadingPad);
+ 		let visibleColumn = 0;
+ 		let targetIndex = chunk.length;
+ 		let lastGraphemeIndex = 0;
+@@ -1907,6 +1931,18 @@ export class Editor implements Component, Focusable {
+ 		if (deltaCol !== 0) {
+ 			const currentLine = this.state.lines[this.state.cursorLine] || "";
+ 
++			// In RTL text "right" is a smaller logical index: the caret walks through
++			// the painted line, not the stored string. Lines without RTL get undefined
++			// here and keep the logical movement below, unchanged.
++			const visualCol = hasStrongRtl(currentLine)
++				? stepCaretVisual(currentLine, this.state.cursorCol, deltaCol > 0 ? 1 : -1)
++				: undefined;
++			if (visualCol !== undefined) {
++				this.setCursorCol(visualCol);
++				if (this.autocompleteState) this.updateAutocomplete();
++				return;
++			}
++
+ 			if (deltaCol > 0) {
+ 				// Moving right - move by one grapheme (handles emojis, combining characters, etc.)
+ 				if (this.state.cursorCol < currentLine.length) {
+diff --git a/packages/tui/src/components/markdown.ts b/packages/tui/src/components/markdown.ts
+index aa21662..36fa4e1 100644
+--- a/packages/tui/src/components/markdown.ts
++++ b/packages/tui/src/components/markdown.ts
+@@ -1,12 +1,34 @@
+ import { Marked, type Token, Tokenizer, type TokenizerExtension, type Tokens } from "marked";
+ import markedCjkFriendly from "marked-cjk-friendly";
++import { alignRight, dominantDirection, getBidiSettings, hasStrongRtl, reorderLine } from "../bidi.ts";
+ import { renderLatex } from "../latex.ts";
+ import { getCapabilities, hyperlink, isImageLine } from "../terminal-image.ts";
+ import type { Component } from "../tui.ts";
+-import { applyBackgroundToLine, flattenLines, visibleWidth, wrapTextWithAnsi } from "../utils.ts";
++import { applyBackgroundToLine, flattenLines, getGraphemeSegmenter, visibleWidth, wrapTextWithAnsi } from "../utils.ts";
+ 
+ const STRICT_STRIKETHROUGH_REGEX = /^(~~)(?=[^\s~])((?:\\.|[^\\])*?(?:\\.|[^\s~\\]))\1(?=[^~]|$)/;
+ 
++/**
++ * Paint one line in visual order and, when alignment is on, against the edge its
++ * dominant script reads from. The width is the column the line lives in, so the
++ * padding that fills it stays part of the line - a background wrapped around the
++ * line still covers the whole row.
++ */
++function paintVisual(text: string, width: number): string {
++	const visual = reorderLine(text);
++	return getBidiSettings().align && dominantDirection(text) === "rtl" ? alignRight(visual, width) : visual;
++}
++
++/**
++ * Paint a list marker the way an RTL reader sees it: the gap on the inner side,
++ * the dash or the number against the reading edge. "1." becomes " .1", so the
++ * digit is the last cell of the line and the dot sits to its left.
++ */
++function mirrorMarker(marker: string): string {
++	const graphemes = [...getGraphemeSegmenter().segment(marker.trimEnd())].map((segment) => segment.segment);
++	return " " + graphemes.reverse().join("");
++}
++
+ class StrictStrikethroughTokenizer extends Tokenizer {
+ 	override del(src: string): Tokens.Del | undefined {
+ 		const match = STRICT_STRIKETHROUGH_REGEX.exec(src);
+@@ -333,25 +355,39 @@ export class Markdown implements Component {
+ 		}
+ 
+ 		// Convert tokens to styled terminal output
+-		const renderedLines: string[] = [];
++		// Code, tables, blockquote borders and list markers are chrome: their content is
++		// reordered where the content is produced, so the border or marker never moves.
++		const renderedLines: Array<{ line: string; reorderable: boolean }> = [];
+ 
+ 		for (let i = 0; i < tokens.length; i++) {
+ 			const token = tokens[i];
+ 			const nextToken = tokens[i + 1];
++			const reorderable =
++				token.type !== "code" && token.type !== "table" && token.type !== "blockquote" && token.type !== "list";
+ 			const tokenLines = this.renderToken(token, contentWidth, nextToken?.type);
+ 			for (const tokenLine of tokenLines) {
+-				renderedLines.push(tokenLine);
++				renderedLines.push({ line: tokenLine, reorderable });
+ 			}
+ 		}
+ 
+-		// Wrap lines (NO padding, NO background yet)
++		// Wrap lines (NO padding, NO background yet). Wrapping runs on logical text; each
++		// visual line is then reordered separately.
+ 		const wrappedLines: string[] = [];
+-		for (const line of renderedLines) {
+-			if (isImageLine(line)) {
+-				wrappedLines.push(line);
++		for (const entry of renderedLines) {
++			if (isImageLine(entry.line)) {
++				wrappedLines.push(entry.line);
+ 			} else {
+-				for (const wrappedLine of wrapTextWithAnsi(line, contentWidth)) {
+-					wrappedLines.push(wrappedLine);
++				for (const wrappedLine of wrapTextWithAnsi(entry.line, contentWidth)) {
++					if (!entry.reorderable || !hasStrongRtl(wrappedLine)) {
++						wrappedLines.push(wrappedLine);
++						continue;
++					}
++					const visual = reorderLine(wrappedLine);
++					const aligned =
++						getBidiSettings().align && dominantDirection(wrappedLine) === "rtl"
++							? alignRight(visual, contentWidth)
++							: visual;
++					wrappedLines.push(aligned);
+ 				}
+ 			}
+ 		}
+@@ -624,8 +660,13 @@ export class Markdown implements Component {
+ 				for (const quoteLine of renderedQuoteLines) {
+ 					const styledLine = applyQuoteStyle(quoteLine);
+ 					const wrappedLines = wrapTextWithAnsi(styledLine, quoteContentWidth);
+-					for (const wrappedLine of wrappedLines) {
+-						lines.push(this.theme.quoteBorder("│ ") + wrappedLine);
++				for (const wrappedLine of wrappedLines) {
++					if (getBidiSettings().align && dominantDirection(wrappedLine) === "rtl") {
++						// In RTL the quote bar marks the reading edge, so it sits on the right.
++						lines.push(paintVisual(wrappedLine, quoteContentWidth) + this.theme.quoteBorder(" │"));
++					} else {
++						lines.push(this.theme.quoteBorder("│ ") + paintVisual(wrappedLine, quoteContentWidth));
++					}
+ 					}
+ 				}
+ 				if (nextTokenType && nextTokenType !== "space") {
+@@ -818,8 +859,21 @@ export class Markdown implements Component {
+ 				const itemLines = this.renderToken(itemToken, itemWidth, undefined, styleContext);
+ 				for (const line of itemLines) {
+ 					for (const wrappedLine of wrapTextWithAnsi(line, itemWidth)) {
+-						const linePrefix = renderedAnyLine ? continuationPrefix : firstPrefix;
+-						lines.push(linePrefix + wrappedLine);
++						if (getBidiSettings().align && dominantDirection(wrappedLine) === "rtl") {
++							// The marker marks the reading edge: in RTL it sits at the right and
++							// the item text hangs to its left. Continuation lines keep the same
++							// content edge, inset by the width of the marker.
++							const prefix = renderedAnyLine
++								? indent + " ".repeat(visibleWidth(marker))
++								: indent;
++							const mirroredMarker = mirrorMarker(marker);
++							const suffix = renderedAnyLine ? " ".repeat(visibleWidth(marker)) : this.theme.listBullet(mirroredMarker);
++							const region = Math.max(1, width - visibleWidth(prefix) - visibleWidth(suffix));
++							lines.push(prefix + paintVisual(wrappedLine, region) + suffix);
++						} else {
++							const linePrefix = renderedAnyLine ? continuationPrefix : firstPrefix;
++							lines.push(linePrefix + paintVisual(wrappedLine, itemWidth));
++						}
+ 						renderedAnyLine = true;
+ 					}
+ 				}
+@@ -988,6 +1042,18 @@ export class Markdown implements Component {
+ 			}
+ 		}
+ 
++		// A table reads the way the text around it reads. For an RTL-dominant table
++		// the first logical column is painted at the right, and the grid hugs the
++		// right edge of the column instead of the left.
++		const tableText = [token.header, ...token.rows]
++			.map((cells) => cells.map((cell) => cell.text ?? "").join(" "))
++			.join(" ");
++		const rtlTable = getBidiSettings().align && dominantDirection(tableText) === "rtl";
++		if (rtlTable) {
++			token = { ...token, header: [...token.header].reverse(), rows: token.rows.map((row) => [...row].reverse()) };
++			columnWidths = [...columnWidths].reverse();
++		}
++
+ 		// Render top border
+ 		const topBorderCells = columnWidths.map((w) => "─".repeat(w));
+ 		lines.push(`┌─${topBorderCells.join("─┬─")}─┐`);
+@@ -1001,7 +1067,8 @@ export class Markdown implements Component {
+ 
+ 		for (let lineIdx = 0; lineIdx < headerLineCount; lineIdx++) {
+ 			const rowParts = headerCellLines.map((cellLines, colIdx) => {
+-				const text = cellLines[lineIdx] || "";
++				// Cell content is painted in visual order; the grid and the padding stay put.
++				const text = paintVisual(cellLines[lineIdx] || "", columnWidths[colIdx]);
+ 				const padded = text + " ".repeat(Math.max(0, columnWidths[colIdx] - visibleWidth(text)));
+ 				return this.theme.bold(padded);
+ 			});
+@@ -1024,7 +1091,7 @@ export class Markdown implements Component {
+ 
+ 			for (let lineIdx = 0; lineIdx < rowLineCount; lineIdx++) {
+ 				const rowParts = rowCellLines.map((cellLines, colIdx) => {
+-					const text = cellLines[lineIdx] || "";
++					const text = paintVisual(cellLines[lineIdx] || "", columnWidths[colIdx]);
+ 					return text + " ".repeat(Math.max(0, columnWidths[colIdx] - visibleWidth(text)));
+ 				});
+ 				lines.push(`│ ${rowParts.join(" │ ")} │`);
+@@ -1039,6 +1106,12 @@ export class Markdown implements Component {
+ 		const bottomBorderCells = columnWidths.map((w) => "─".repeat(w));
+ 		lines.push(`└─${bottomBorderCells.join("─┴─")}─┘`);
+ 
++		if (rtlTable) {
++			for (let i = 0; i < lines.length; i++) {
++				if (lines[i].includes("│") || lines[i].includes("─")) lines[i] = alignRight(lines[i], availableWidth);
++			}
++		}
++
+ 		if (nextTokenType && nextTokenType !== "space") {
+ 			lines.push(""); // Add spacing after table
+ 		}
+diff --git a/packages/tui/src/components/text.ts b/packages/tui/src/components/text.ts
+index 0247489..1b9057c 100644
+--- a/packages/tui/src/components/text.ts
++++ b/packages/tui/src/components/text.ts
+@@ -1,3 +1,4 @@
++import { alignRight, dominantDirection, getBidiSettings, reorderLine } from "../bidi.ts";
+ import type { Component } from "../tui.ts";
+ import { applyBackgroundToLine, flattenLines, visibleWidth, wrapTextWithAnsi } from "../utils.ts";
+ 
+@@ -69,8 +70,13 @@ export class Text implements Component {
+ 		const paddingX = Math.min(this.paddingX, Math.max(0, Math.floor((width - 1) / 2)));
+ 		const contentWidth = Math.max(1, width - paddingX * 2);
+ 
+-		// Wrap text (this preserves ANSI codes but does NOT pad)
+-		const wrappedLines = wrapTextWithAnsi(normalizedText, contentWidth);
++		// Wrap text (this preserves ANSI codes but does NOT pad). Wrapping works on the
++		// logical text; each visual line is then reordered and, when alignment is on,
++		// pushed to the edge its dominant script reads from.
++		const wrappedLines = wrapTextWithAnsi(normalizedText, contentWidth).map((line) => {
++			const visual = reorderLine(line);
++			return getBidiSettings().align && dominantDirection(line) === "rtl" ? alignRight(visual, contentWidth) : visual;
++		});
+ 
+ 		// Add margins and background to each line
+ 		const leftMargin = " ".repeat(paddingX);
+diff --git a/packages/tui/src/components/truncated-text.ts b/packages/tui/src/components/truncated-text.ts
+index c26b889..13219cf 100644
+--- a/packages/tui/src/components/truncated-text.ts
++++ b/packages/tui/src/components/truncated-text.ts
+@@ -1,3 +1,4 @@
++import { alignRight, dominantDirection, getBidiSettings, reorderLine } from "../bidi.ts";
+ import type { Component } from "../tui.ts";
+ import { truncateToWidth, visibleWidth } from "../utils.ts";
+ 
+@@ -40,8 +41,11 @@ export class TruncatedText implements Component {
+ 			singleLineText = this.text.substring(0, newlineIndex);
+ 		}
+ 
+-		// Truncate text if needed (accounting for ANSI codes)
+-		const displayText = truncateToWidth(singleLineText, availableWidth);
++		// The cut is made in logical order, then the line is painted in visual order and
++		// pushed to the edge its dominant script reads from.
++		const truncated = truncateToWidth(singleLineText, availableWidth);
++		const visual = reorderLine(truncated);
++		const displayText = getBidiSettings().align && dominantDirection(truncated) === "rtl" ? alignRight(visual, availableWidth) : visual;
+ 
+ 		// Add horizontal padding
+ 		const leftPadding = " ".repeat(this.paddingX);
+diff --git a/packages/tui/src/index.ts b/packages/tui/src/index.ts
+index eb96260..b22a6be 100644
+--- a/packages/tui/src/index.ts
++++ b/packages/tui/src/index.ts
+@@ -9,6 +9,20 @@ export {
+ 	CombinedAutocompleteProvider,
+ 	type SlashCommand,
+ } from "./autocomplete.ts";
++// Components
++export {
++	alignRight,
++	type BaseDirection,
++	type BidiSettings,
++	configureBidi,
++	detectBaseDirection,
++	dominantDirection,
++	getBidiSettings,
++	hasStrongRtl,
++	reorderLine,
++	reorderLineWithCaret,
++	stepCaretVisual,
++} from "./bidi.ts";
+ // Colors and styling
+ export {
+ 	backgroundAnsi,
+@@ -36,7 +50,6 @@ export {
+ 	type TextAttributes,
+ 	type TextStyle,
+ } from "./colors.ts";
+-// Components
+ export { Box } from "./components/box.ts";
+ export { CancellableLoader } from "./components/cancellable-loader.ts";
+ export { Editor, type EditorOptions, type EditorTheme } from "./components/editor.ts";
+diff --git a/packages/tui/test/bidi-editor.test.ts b/packages/tui/test/bidi-editor.test.ts
+new file mode 100644
+index 0000000..6e9fa8f
+--- /dev/null
++++ b/packages/tui/test/bidi-editor.test.ts
+@@ -0,0 +1,117 @@
++import assert from "node:assert";
++import { describe, it } from "node:test";
++import { configureBidi } from "../src/bidi.ts";
++import { Editor } from "../src/components/editor.ts";
++import { FAKE_CURSOR_START } from "../src/tui.ts";
++import { TuiMainScreen } from "../src/tui-main-screen.ts";
++import { visibleWidth } from "../src/utils.ts";
++import { defaultEditorTheme } from "./test-themes.ts";
++import { VirtualTerminal } from "./virtual-terminal.ts";
++
++function createTestTUI(cols = 80, rows = 24): TUI {
++	return new TuiMainScreen(new VirtualTerminal(cols, rows));
++}
++
++function typeInto(editor: Editor, text: string): void {
++	for (const char of text) editor.handleInput(char);
++}
++
++describe("RTL in the editor", () => {
++	it("paints an RTL line in visual order while keeping the logical string", () => {
++		const editor = new Editor(createTestTUI(40), defaultEditorTheme);
++		typeInto(editor, "مرحبا");
++
++		assert.strictEqual(editor.state.lines[0], "مرحبا", "stored text stays logical");
++		const content = editor.render(40)[1]!;
++		assert.ok(content.includes("ا"), "visual line starts with the last logical grapheme");
++		assert.ok(visibleWidth(content) <= 40, "painted line does not change width");
++	});
++
++	it("keeps English lines byte for byte", () => {
++		const editor = new Editor(createTestTUI(40), defaultEditorTheme);
++		typeInto(editor, "hello world");
++		assert.deepStrictEqual(editor.render(40), editor.render(40));
++		const line = editor.render(40)[1]!;
++		assert.ok(line.includes("hello world"), "LTR line is not reordered");
++	});
++
++	it("moves the caret visually, not logically, on arrow keys", () => {
++		const editor = new Editor(createTestTUI(40), defaultEditorTheme);
++		typeInto(editor, "مرحبا");
++		// Logical caret is at the end (index 5), which is the left edge visually.
++		assert.strictEqual(editor.state.cursorCol, 5);
++
++		// Right arrow goes right on screen = one grapheme earlier in the string.
++		editor.handleInput("\x1b[C");
++		assert.strictEqual(editor.state.cursorCol, 4, "right arrow steps backwards through RTL text");
++
++		// Pressing Left at the logical end (already the visual left edge) does nothing.
++		for (let i = 0; i < 5; i++) editor.handleInput("\x1b[D");
++		assert.strictEqual(editor.state.cursorCol, 5, "caret stops at the visual left edge");
++
++		// Right walks back through the run one grapheme at a time.
++		for (let i = 0; i < 5; i++) editor.handleInput("\x1b[C");
++		assert.strictEqual(editor.state.cursorCol, 0, "right arrow reaches the logical start");
++		editor.handleInput("\x1b[C");
++		assert.strictEqual(editor.state.cursorCol, 0, "caret does not jump past the visual right edge");
++	});
++
++	it("places the painted caret on the visual side of the grapheme it precedes", () => {
++		const editor = new Editor(createTestTUI(40), defaultEditorTheme);
++		typeInto(editor, "مرحبا");
++		const line = editor.render(40)[1]!;
++
++		// Caret is at the logical end, so it must appear at the left of the RTL run,
++		// not at the right where the logical index would put it.
++		const cursorColumn = line.indexOf(FAKE_CURSOR_START);
++		const textStart = line.search(/[ء-ي]/);
++		assert.ok(
++			cursorColumn >= 0 && cursorColumn <= textStart,
++			`caret at column ${cursorColumn}, run starts at ${textStart}`,
++		);
++	});
++
++	it("keeps the caret on the visual edge when the RTL line is right-aligned", () => {
++		configureBidi({ enabled: true, align: true });
++		try {
++			const editor = new Editor(createTestTUI(40), defaultEditorTheme);
++			typeInto(editor, "مرحبا");
++			const line = editor.render(40)[1]!;
++
++			// The run hugs the right edge of the column and the caret still sits at the
++			// left of it, where an RTL reader expects the next character to go.
++			assert.equal(visibleWidth(line), 40, line);
++			const cursorColumn = line.indexOf(FAKE_CURSOR_START);
++			const textStart = line.search(/[ء-ي]/);
++			assert.ok(textStart > 0, `run starts at column ${textStart}`);
++			assert.ok(cursorColumn >= 0 && cursorColumn <= textStart, `caret at ${cursorColumn}, run at ${textStart}`);
++			assert.ok(visibleWidth(line) === 40, line);
++		} finally {
++			configureBidi({ enabled: true, align: false });
++		}
++	});
++
++	it("draws the caret at the left edge of an RTL line, where the text ends", async () => {
++		const terminal = new VirtualTerminal(40, 8);
++		const editor = new Editor(new TuiMainScreen(terminal), defaultEditorTheme);
++		typeInto(editor, "مرحبا\nعالم");
++		for (const line of editor.render(40)) terminal.write(`${line}\n`);
++		const line = editor.render(40)[1]!;
++		// Drop the styling and cursor-marker escapes, keep the painted graphemes.
++		const painted = line
++			.replace(/\x1b[^\x07]*\x07/g, "")
++			.replace(/\x1b\[[0-9;]*m/g, "")
++			.trimEnd();
++		// The caret sits at the logical end, which in RTL is the left edge of the line.
++		assert.ok(painted.startsWith("ا"), painted);
++		assert.ok(painted.indexOf("ا") < painted.indexOf("ب"), painted);
++	});
++
++	it("inserts at the caret position when typing in the middle of an RTL line", () => {
++		const editor = new Editor(createTestTUI(40), defaultEditorTheme);
++		typeInto(editor, "مرحبا");
++		editor.handleInput("\x1b[C"); // visual right = logical position 4
++		editor.handleInput("X");
++		assert.strictEqual(editor.state.lines[0], "مرحبXا", "typing lands at the logical caret");
++	});
++});
+diff --git a/packages/tui/test/bidi-markdown.test.ts b/packages/tui/test/bidi-markdown.test.ts
+new file mode 100644
+index 0000000..4729899
+--- /dev/null
++++ b/packages/tui/test/bidi-markdown.test.ts
+@@ -0,0 +1,190 @@
++import assert from "node:assert";
++import { describe, it } from "node:test";
++import { configureBidi, reorderLine } from "../src/bidi.ts";
++import { Markdown } from "../src/components/markdown.ts";
++import { visibleWidth, wrapTextWithAnsi } from "../src/utils.ts";
++import { defaultMarkdownTheme } from "./test-themes.ts";
++import { VirtualTerminal } from "./virtual-terminal.ts";
++
++function stripAnsi(line: string): string {
++	return line.replace(/\x1b\[[0-9;]*m/g, "");
++}
++
++function renderMarkdown(markdown: string, width: number): string[] {
++	return new Markdown(markdown, 0, 0, defaultMarkdownTheme).render(width).map((line) => stripAnsi(line).trimEnd());
++}
++
++describe("Arabic in the markdown renderer", () => {
++	it("paints an RTL paragraph in visual order", () => {
++		assert.equal(renderMarkdown("مرحبا بالعالم", 40)[0], "ملاعلاب ابحرم");
++	});
++
++	it("leaves English paragraphs exactly as before", () => {
++		assert.equal(renderMarkdown("hello world", 40)[0], "hello world");
++	});
++
++	it("wraps the logical text, then reorders each visual line", () => {
++		const text = "هذا نص عربي طويل جدا جدا جدا لا يستوعبه العرض";
++		const logicalLines = wrapTextWithAnsi(text, 20);
++		const visualLines = renderMarkdown(text, 20);
++		assert.ok(logicalLines.length > 1, "the paragraph must wrap");
++		assert.equal(visualLines.length, logicalLines.length);
++		for (let i = 0; i < logicalLines.length; i++) {
++			assert.equal(visualLines[i], reorderLine(logicalLines[i]), `line ${i}: ${visualLines[i]}`);
++		}
++	});
++
++	it("keeps code blocks left to right", () => {
++		const lines = renderMarkdown("```python\n# مرحبا\nprint(1)\n```", 40);
++		assert.ok(
++			lines.some((line) => line.includes("مرحبا")),
++			lines.join("\n"),
++		);
++	});
++
++	it("keeps list markers on the left edge", () => {
++		const lines = renderMarkdown("- مرحبا\n- عالم", 40);
++		assert.ok(lines[0].startsWith("- "), lines[0]);
++		assert.ok(lines[1].startsWith("- "), lines[1]);
++	});
++
++	it("keeps the table grid while reordering cell content", () => {
++		const lines = renderMarkdown("| عربي | English |\n|------|---------|\n| مرحبا | hello |", 40);
++		assert.ok(
++			lines.some((line) => line.startsWith("┌─")),
++			lines[0],
++		);
++		const header = lines.find((line) => line.includes("│"))!;
++		// The cell text travels; the column widths and the │ do not.
++		assert.ok(header.includes("يبرع"), header);
++		assert.ok(header.includes("English"), header);
++		assert.equal(visibleWidth(header.replace(/\x1b\[[0-9;]*m/g, "")), visibleWidth(lines[2]), header);
++	});
++
++	it("reorders Hebrew and Persian inside the borders of a blockquote", () => {
++		const lines = renderMarkdown("> שלום hello\n> این خط فارسی است", 40);
++		assert.ok(lines[0].startsWith("│ "), lines[0]);
++		assert.ok(!lines[0].includes("שלום"), lines[0]);
++		assert.ok(lines[1].startsWith("│ "), lines[1]);
++	});
++
++	it("writes the reordered cells into the terminal buffer", async () => {
++		const terminal = new VirtualTerminal(24, 4);
++		for (const line of new Markdown("مرحبا بالعالم", 1, 0, defaultMarkdownTheme).render(24)) {
++			terminal.write(`${line}\n`);
++		}
++		const viewport = await terminal.flushAndGetViewport();
++		const row = viewport.findIndex((line) => line.trim().length > 0);
++		assert.ok(row >= 0, viewport.join("|"));
++		assert.equal(viewport[row].trim(), "ملاعلاب ابحرم", viewport[row]);
++	});
++
++	it("renders the old way when bidi is switched off", () => {
++		const withBidi = renderMarkdown("مرحبا بالعالم", 40);
++		configureBidi({ enabled: false });
++		const withoutBidi = renderMarkdown("مرحبا بالعالم", 40);
++		configureBidi({ enabled: true });
++		assert.equal(withBidi[0], "ملاعلاب ابحرم");
++		assert.equal(withoutBidi[0], "مرحبا بالعالم");
++	});
++
++	it("keeps the background fill to the right edge of a reordered line", () => {
++		configureBidi({ enabled: true, align: false });
++		const line = new Markdown(
++			"مرحبا بالعالم **bold**",
++			1,
++			0,
++			defaultMarkdownTheme,
++			{ bgColor: (text: string) => `\x1b[44m${text}\x1b[49m` },
++		).render(30)[0];
++
++		assert.ok(line.includes("ملاعلاب"), line);
++
++		// The background the renderer wraps the line in has to survive the reorder:
++		// a full reset in the middle of the line would leave the padding black.
++		const bgStart = line.indexOf("\x1b[44m");
++		const bgEnd = line.lastIndexOf("\x1b[49m");
++		assert.ok(bgStart >= 0 && bgEnd > bgStart, line);
++		assert.ok(!line.slice(bgStart + 6, bgEnd).includes("\x1b[0m"), line);
++		assert.equal(visibleWidth(line), 30, line);
++	});
++});
++
++describe("alignment follows the script that dominates the line", () => {
++	function renderAligned(markdown: string, width: number): string {
++		configureBidi({ enabled: true, align: true });
++		return new Markdown(markdown, 0, 0, defaultMarkdownTheme).render(width)[0].trimEnd();
++	}
++
++	it("pushes an Arabic line to the right edge", () => {
++		const line = renderAligned("مرحبا بالعالم", 20);
++		assert.equal(stripAnsi(line), "       ملاعلاب ابحرم", line);
++		assert.equal(visibleWidth(line), 20, line);
++	});
++
++	it("leaves an English line at the left edge", () => {
++		const line = renderAligned("hello world", 20);
++		assert.equal(stripAnsi(line), "hello world", line);
++	});
++
++	it("leaves a mixed line with more English than Arabic at the left edge", () => {
++		const line = renderAligned("npm install ثم build the package", 40);
++		assert.ok(line.startsWith("npm install"), line);
++		assert.ok(!line.startsWith(" "), line);
++	});
++
++	it("pushes a mixed line with more Arabic than English to the right edge", () => {
++		const line = renderAligned("مرحبا بالعالم (mixed 1234)", 40);
++		assert.ok(!line.startsWith("npm"), line);
++		assert.ok(visibleWidth(line) === 40, line);
++		assert.ok(stripAnsi(line).startsWith(" "), line);
++	});
++
++	it("never changes the visible width of a wrapped paragraph", () => {
++		configureBidi({ enabled: true, align: true });
++		const lines = new Markdown("مرحبا بالعالم هذا اختبار للنص الطويل الذي ينعطف", 0, 0, defaultMarkdownTheme).render(30);
++		for (const line of lines) {
++			assert.ok(visibleWidth(line) <= 30, line);
++		}
++		// Every line of the paragraph ends at the same column.
++		assert.ok(lines.every((line) => visibleWidth(line) === 30), lines.map((line) => visibleWidth(line)).join(","));
++		configureBidi({ enabled: true, align: false });
++	});
++
++	it("puts the marker on the reading edge of an RTL list item", () => {
++		configureBidi({ enabled: true, align: true });
++		const lines = new Markdown("- عنصر قصير\n- عنصر آخر", 0, 0, defaultMarkdownTheme).render(20);
++		assert.ok(stripAnsi(lines[0]).trimEnd().endsWith("-"), lines[0]);
++		assert.ok(!stripAnsi(lines[0]).startsWith("- "), lines[0]);
++		assert.ok(stripAnsi(lines[1]).trimEnd().endsWith("-"), lines[1]);
++		assert.ok(lines.every((line) => visibleWidth(line) === 20), lines.join("|"));
++
++		// An item whose text is mostly English keeps its marker on the left.
++		const english = new Markdown("- npm install the package now", 0, 0, defaultMarkdownTheme).render(40)[0];
++		assert.ok(stripAnsi(english).startsWith("- "), english);
++		configureBidi({ enabled: true, align: false });
++	});
++
++	it("puts the blockquote bar on the reading edge of an RTL quote", () => {
++		configureBidi({ enabled: true, align: true });
++		const line = new Markdown("> اقتباس عربي", 0, 0, defaultMarkdownTheme).render(20)[0];
++		assert.ok(stripAnsi(line).trimEnd().endsWith("│"), line);
++		assert.equal(visibleWidth(line), 20, line);
++		configureBidi({ enabled: true, align: false });
++	});
++
++	it("mirrors an RTL table's columns and hugs the grid to the right edge", () => {
++		configureBidi({ enabled: true, align: true });
++		const lines = new Markdown("| الأمر | البديل |\n|---|---|\n| grep -r | rg |", 0, 0, defaultMarkdownTheme).render(30);
++		const grid = lines[0];
++		assert.ok(stripAnsi(grid).startsWith(" "), grid);
++		assert.ok(!stripAnsi(grid).startsWith("┌"), grid);
++		assert.ok(grid.includes("┐"), grid);
++		assert.ok(!grid.includes("┐ "), grid); // the grid ends flush with the column edge
++
++		const header = lines[1];
++		// The logical first column is painted on the right, its content still in visual order.
++		assert.ok(header.indexOf("ليدبلا") < header.indexOf("رمألا"), header);
++		configureBidi({ enabled: true, align: false });
++	});
++});
+diff --git a/packages/tui/test/bidi-text.test.ts b/packages/tui/test/bidi-text.test.ts
+new file mode 100644
+index 0000000..991147e
+--- /dev/null
++++ b/packages/tui/test/bidi-text.test.ts
+@@ -0,0 +1,51 @@
++import assert from "node:assert";
++import { describe, it } from "node:test";
++import { configureBidi, reorderLine } from "../src/bidi.ts";
++import { Text } from "../src/components/text.ts";
++import { TruncatedText } from "../src/components/truncated-text.ts";
++import { truncateToWidth, visibleWidth } from "../src/utils.ts";
++
++function stripAnsi(line: string): string {
++	return line
++		.replace(/\x1b\[[0-9;]*m/g, "")
++		.replace(/\x1b\][^\x07]*(?:\x07|\x1b\\)/g, "")
++		.trimEnd();
++}
++
++describe("RTL in Text and TruncatedText", () => {
++	it("reorders an RTL line in Text", () => {
++		const text = new Text("مرحبا بالعالم", 0, 0);
++		const lines = text.render(20);
++		assert.equal(stripAnsi(lines[0]), "ملاعلاب ابحرم", lines[0]);
++	});
++
++	it("leaves an English line byte for byte", () => {
++		const text = new Text("hello world 1234", 0, 0);
++		assert.equal(stripAnsi(text.render(20)[0]), "hello world 1234");
++	});
++
++	it("truncates logically, then reorders the visual line", () => {
++		const expected = stripAnsi(reorderLine(truncateToWidth("مرحبا بالعالم", 8)));
++		const line = stripAnsi(new TruncatedText("مرحبا بالعالم", 0, 0).render(8)[0]);
++		assert.ok(visibleWidth(line) <= 8, line);
++		assert.ok(line.includes("..."), line);
++		// The cut is made on the logical string, then painted in visual order.
++		assert.equal(line, expected, line);
++	});
++
++	it("keeps width stable for wrapped RTL lines", () => {
++		const text = new Text("مرحبا بالعالم هذا اختبار للنص الطويل الذي ينعطف", 0, 0);
++		for (const line of text.render(20)) {
++			assert.ok(visibleWidth(stripAnsi(line)) <= 20, line);
++		}
++	});
++
++	it("does nothing when bidi is disabled", () => {
++		const enabled = stripAnsi(new Text("مرحبا", 0, 0).render(20)[0]);
++		configureBidi({ enabled: false });
++		const disabled = stripAnsi(new Text("مرحبا", 0, 0).render(20)[0]);
++		configureBidi({ enabled: true });
++		assert.equal(disabled, "مرحبا", disabled);
++		assert.equal(enabled, "ابحرم", enabled);
++	});
++});
+diff --git a/packages/tui/test/bidi.test.ts b/packages/tui/test/bidi.test.ts
+new file mode 100644
+index 0000000..ab6dc5b
+--- /dev/null
++++ b/packages/tui/test/bidi.test.ts
+@@ -0,0 +1,145 @@
++import assert from "node:assert";
++import { describe, it } from "node:test";
++import bidiModule from "bidi-js";
++import { alignRight, detectBaseDirection, dominantDirection, hasStrongRtl, reorderLine } from "../src/bidi.ts";
++import { visibleWidth } from "../src/utils.ts";
++
++describe("strong script detection", () => {
++	it("does not treat Latin text as RTL", () => {
++		assert.equal(hasStrongRtl("hello world 123"), false);
++		assert.equal(hasStrongRtl("مرحبا"), true);
++		assert.equal(hasStrongRtl("שלום"), true);
++		// Combining marks are not strong: a Latin string carrying an Arabic vowel
++		// mark is still left-to-right.
++		assert.equal(hasStrongRtl("a\u064F"), false);
++	});
++
++	it("uses the first strong character for the base direction", () => {
++		assert.equal(detectBaseDirection("   مرحبا"), "rtl");
++		assert.equal(detectBaseDirection("pi is مرحبا"), "ltr");
++		assert.equal(detectBaseDirection("مرحبا", "ltr"), "ltr");
++	});
++});
++
++describe("reorderLine", () => {
++	it("leaves lines without RTL content untouched", () => {
++		const plain = "hello world, run npm install --save typescript";
++		assert.equal(reorderLine(plain), plain);
++		const styled = "\x1b[31merror:\x1b[0m expected 1 but got 2";
++		assert.equal(reorderLine(styled), styled);
++	});
++
++	it("reverses a pure Arabic paragraph", () => {
++		assert.equal(reorderLine("مرحبا بالعالم"), "ملاعلاب ابحرم");
++	});
++
++	it("keeps embedded Latin words in left-to-right order", () => {
++		assert.equal(reorderLine("ارسل إلى npm install ثم check"), "check مث npm install ىلإ لسرا");
++		assert.equal(reorderLine("C:/Users/ali/file.ts هذا ملف"), "C:/Users/ali/file.ts فلم اذه");
++	});
++
++	it("keeps combining marks attached to their base character", () => {
++		// A code-unit reversal would put the damma before the meem; a grapheme
++		// reversal keeps the cluster together.
++		const visual = reorderLine("مُرحبا");
++		assert.equal(visual, "ابحرم\u064F");
++		assert.ok(!visual.startsWith("\u064F"), "the mark must not end up alone at the line start");
++	});
++
++	it("mirrors brackets in right-to-left runs", () => {
++		assert.equal(reorderLine("الفقرة (الثانية) تنتهي"), "يهتنت (ةيناثلا) ةرقفلا");
++	});
++
++	it("keeps edge whitespace where the layout put it", () => {
++		// UAX #9 L1.4 keeps trailing whitespace at the end of the line. Leading
++		// whitespace is anchored the same way because in a terminal the indent is
++		// layout produced by the renderer, not content the reader is reading.
++		assert.equal(reorderLine("مرحبا   "), "ابحرم   ");
++		assert.equal(reorderLine("  مرحبا"), "  ابحرم");
++	});
++
++	it("does not move positional escape sequences", () => {
++		const marker = "مرحبا\x1b_pi:c\x07";
++		assert.equal(reorderLine(marker), marker);
++		assert.equal(reorderLine("مرحبا\x1b[2H"), "مرحبا\x1b[2H");
++	});
++
++	it("keeps cell width identical after reordering", () => {
++		const lines = ["مرحبا بالعالم", "السعر 100 دولار", "نص (داخل الأقواس)", "مُرحبا by pi", "日本語 مرحبا"];
++		for (const line of lines) {
++			assert.equal(visibleWidth(reorderLine(line)), visibleWidth(line), line);
++		}
++	});
++
++	it("keeps styling with the grapheme it moves", () => {
++		// The meem is the last logical character, so it becomes the first glyph of
++		// the RTL run; the red that opened the span travels with it. The span is
++		// closed with the code that clears only the foreground, never a full reset,
++		// which would also wipe the background wrapped around the line.
++		assert.equal(reorderLine("\x1b[31mمرحبا\x1b[0m tail"), "tail \x1b[31mابحرم");
++		assert.ok(!reorderLine("\x1b[31mمرحبا\x1b[0m tail").includes("\x1b[0m"));
++	});
++
++	it("closes a style with the code that clears only that attribute", () => {
++		// A full reset in the middle of the line would also wipe the background the
++		// renderer wraps the line in, leaving the padding black.
++		const line = "\x1b[38;5;250mمرحبا\x1b[39m tail";
++		const reordered = reorderLine(line);
++		assert.ok(!reordered.includes("\x1b[0m"), reordered);
++		assert.equal(reordered.replace(/\x1b\[[0-9;]*m/g, ""), "tail ابحرم", reordered);
++		assert.equal(visibleWidth(reordered), visibleWidth(line), reordered);
++	});
++
++	it("treats the empty parameter form ESC[m as a reset", () => {
++		const reordered = reorderLine("\x1b[1mمرحبا\x1b[m tail");
++		assert.equal(reordered.replace(/\x1b\[[0-9;]*m/g, ""), "tail ابحرم", reordered);
++	});
++
++	it("keeps hyperlinks attached to their text", () => {
++		const line = "مرحبا \x1b]8;;https://pi.dev\x07الرابط\x1b]8;;\x07";
++		const reordered = reorderLine(line);
++		assert.ok(visibleWidth(reordered) === visibleWidth(line), reordered);
++		assert.ok(reordered.includes("https://pi.dev"), reordered);
++	});
++
++	it("aligns RTL lines to the right edge", () => {
++		const line = "مرحبا";
++		assert.equal(visibleWidth(alignRight(line, 20)), 20);
++		assert.ok(alignRight(line, 20).startsWith("   "));
++	});
++
++	it("aligns with the script that dominates the line", () => {
++		// No RTL content means nothing to move: the line stays where it is.
++		assert.equal(dominantDirection("hello world 1234"), undefined);
++		assert.equal(dominantDirection("مرحبا بالعالم"), "rtl");
++		assert.equal(dominantDirection("npm install ثم build the package"), "ltr");
++		assert.equal(dominantDirection("مرحبا بالعالم (mixed 1234)"), "rtl");
++		assert.equal(dominantDirection("مرحبا"), "rtl");
++		assert.equal(dominantDirection("عربي text"), "rtl");
++		// Equal counts fall back to the first strong character, the same rule UAX #9
++		// uses for direction, so the script the line starts with wins.
++		assert.equal(dominantDirection("مرحبا hello"), "rtl");
++		assert.equal(dominantDirection("hello مرحبا"), "ltr");
++	});
++
++	// The reference is bidi-js's own UAX #9 reordering, run on the same graphemes.
++	it("matches the bidi-js reference reordering", () => {
++		const reference = bidiModule();
++		const samples = [
++			"مرحبا بالعالم",
++			"الرقم 1234 هو الاصغر",
++			"مرحبا — this line mixes Arabic and English, with numbers 1234.",
++			"(قوس) مع [أقواس]",
++			"عنصر أول",
++			"أكتب بالعربية here",
++			"هل支持 bidi؟ نعم 123",
++		];
++		// Combining marks are excluded: bidi-js reorders by code unit and detaches a
++		// mark from its base letter, while a terminal needs the cluster to travel whole.
++		for (const sample of samples) {
++			const levels = reference.getEmbeddingLevels(sample, "auto");
++			const expected = reference.getReorderedString(sample, levels);
++			assert.equal(reorderLine(sample), expected, sample);
++		}
++	});
++});
