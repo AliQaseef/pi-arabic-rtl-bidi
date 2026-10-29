@@ -95,6 +95,8 @@ export interface SettingsConfig {
 	defaultProjectTrust: DefaultProjectTrust;
 	clearOnShrink: boolean;
 	showTerminalProgress: boolean;
+	rtlEnabled: boolean;
+	rtlAlign: boolean;
 	tuiMode: TuiMode;
 	fullscreenExitOutput: FullscreenExitOutput;
 	fullscreenScrollbar: ScrollViewScrollbar;
@@ -135,6 +137,8 @@ export interface SettingsCallbacks {
 	onDefaultProjectTrustChange: (defaultProjectTrust: DefaultProjectTrust) => void;
 	onClearOnShrinkChange: (enabled: boolean) => void;
 	onShowTerminalProgressChange: (enabled: boolean) => void;
+	onRtlEnabledChange: (enabled: boolean) => void;
+	onRtlAlignChange: (enabled: boolean) => void;
 	onTuiModeChange: (mode: TuiMode) => void;
 	onFullscreenExitOutputChange: (output: FullscreenExitOutput) => void;
 	onFullscreenScrollbarChange: (mode: ScrollViewScrollbar) => void;
@@ -875,6 +879,24 @@ export class SettingsSelectorComponent extends Container {
 			values: ["true", "false"],
 		});
 
+		// Bidirectional text toggles (insert after terminal-progress)
+		const terminalProgressIndex = items.findIndex((item) => item.id === "terminal-progress");
+		items.splice(terminalProgressIndex + 1, 0, {
+			id: "rtl-reorder",
+			label: "Bidirectional text",
+			description: "Reorder right-to-left text for display; copy, search and caret stay logical",
+			currentValue: config.rtlEnabled ? "true" : "false",
+			values: ["true", "false"],
+		});
+		const rtlIndex = items.findIndex((item) => item.id === "rtl-reorder");
+		items.splice(rtlIndex + 1, 0, {
+			id: "rtl-align",
+			label: "Right-align RTL lines",
+			description: "Align right-to-left lines to the right edge of the content column",
+			currentValue: config.rtlAlign ? "true" : "false",
+			values: ["true", "false"],
+		});
+
 		// Add borders
 		this.addChild(new DynamicBorder());
 
@@ -974,6 +996,12 @@ export class SettingsSelectorComponent extends Container {
 						break;
 					case "terminal-progress":
 						callbacks.onShowTerminalProgressChange(newValue === "true");
+						break;
+					case "rtl-reorder":
+						callbacks.onRtlEnabledChange(newValue === "true");
+						break;
+					case "rtl-align":
+						callbacks.onRtlAlignChange(newValue === "true");
 						break;
 					case "tui-mode":
 						callbacks.onTuiModeChange(newValue as TuiMode);

@@ -101,6 +101,23 @@ const TerminalSettingsSchema = Type.Object({
 		Type.Union([Type.Literal("kitty"), Type.Literal("iterm2"), Type.Literal("auto"), Type.Literal(false)]),
 	),
 	trueColor: Type.Optional(Type.Union([Type.Boolean(), Type.Literal("auto")])),
+	rtl: Type.Optional(
+		Type.Object({
+			enabled: Type.Optional(
+				Type.Boolean({
+					description:
+						"Reorder right-to-left text for display so Arabic, Hebrew and Persian render in visual order.",
+					default: SETTINGS_DEFAULTS.terminal.rtl.enabled,
+				}),
+			),
+			align: Type.Optional(
+				Type.Boolean({
+					description: "Align RTL lines to the right edge. Only glyph order is reordered in this version.",
+					default: SETTINGS_DEFAULTS.terminal.rtl.align,
+				}),
+			),
+		}),
+	),
 });
 
 const ImageSettingsSchema = Type.Object({

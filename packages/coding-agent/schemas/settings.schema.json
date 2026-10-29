@@ -466,6 +466,21 @@
               "const": "auto"
             }
           ]
+        },
+        "rtl": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Reorder right-to-left text for display so Arabic, Hebrew and Persian render in visual order.",
+              "default": true
+            },
+            "align": {
+              "type": "boolean",
+              "description": "Align RTL lines to the right edge. Only glyph order is reordered in this version.",
+              "default": false
+            }
+          }
         }
       }
     },

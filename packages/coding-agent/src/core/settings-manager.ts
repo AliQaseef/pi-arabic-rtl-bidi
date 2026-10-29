@@ -1257,6 +1257,40 @@ export class SettingsManager {
 		return this.settings.terminal?.showTerminalProgress ?? SETTINGS_DEFAULTS.terminal.showTerminalProgress;
 	}
 
+	getRtlSettings(): { enabled: boolean; align: boolean } {
+		const rtl = this.settings.terminal?.rtl;
+		const enabled = rtl?.enabled ?? SETTINGS_DEFAULTS.terminal.rtl.enabled;
+		return {
+			enabled: enabled && process.env.PI_RTL !== "0",
+			align: rtl?.align ?? SETTINGS_DEFAULTS.terminal.rtl.align,
+		};
+	}
+
+	setRtlEnabled(enabled: boolean): void {
+		if (!this.globalSettings.terminal) {
+			this.globalSettings.terminal = {};
+		}
+		if (!this.globalSettings.terminal.rtl) {
+			this.globalSettings.terminal.rtl = {};
+		}
+		this.globalSettings.terminal.rtl.enabled = enabled;
+		this.globalSettings.terminal.rtl.enabled = enabled;
+		this.markModified("terminal", "rtl");
+		this.save();
+	}
+
+	setRtlAlign(enabled: boolean): void {
+		if (!this.globalSettings.terminal) {
+			this.globalSettings.terminal = {};
+		}
+		if (!this.globalSettings.terminal.rtl) {
+			this.globalSettings.terminal.rtl = {};
+		}
+		this.globalSettings.terminal.rtl.align = enabled;
+		this.markModified("terminal", "rtl");
+		this.save();
+	}
+
 	setShowTerminalProgress(enabled: boolean): void {
 		if (!this.globalSettings.terminal) {
 			this.globalSettings.terminal = {};

@@ -1,4 +1,5 @@
 import type { AutocompleteProvider, AutocompleteSuggestions } from "../autocomplete.ts";
+import { hasStrongRtl, reorderLine, reorderLineWithCaret, stepCaretVisual } from "../bidi.ts";
 import { getKeybindings } from "../keybindings.ts";
 import { decodePrintableKey, matchesKey } from "../keys.ts";
 import { KillRing } from "../kill-ring.ts";
@@ -575,14 +576,23 @@ export class Editor implements Component, Focusable {
 		const emitCursorMarker = this.focused;
 
 		for (const layoutLine of visibleLines) {
-			let displayText = layoutLine.text;
+			// The editor keeps logical order in state.lines; painting reorders RTL lines
+			// and moves the caret to the boundary it precedes in visual order.
+			const painted = hasStrongRtl(layoutLine.text)
+				? layoutLine.hasCursor && layoutLine.cursorPos !== undefined
+					? reorderLineWithCaret(layoutLine.text, layoutLine.cursorPos)
+					: { line: reorderLine(layoutLine.text), caretOffset: undefined }
+				: undefined;
+
+			let displayText = painted ? painted.line : layoutLine.text;
+			const caretPos = painted ? painted.caretOffset : layoutLine.cursorPos;
 			let lineVisibleWidth = visibleWidth(layoutLine.text);
 			let cursorInPadding = false;
 
 			// Add cursor if this line has it
-			if (layoutLine.hasCursor && layoutLine.cursorPos !== undefined) {
-				const before = displayText.slice(0, layoutLine.cursorPos);
-				const after = displayText.slice(layoutLine.cursorPos);
+			if (layoutLine.hasCursor && caretPos !== undefined) {
+				const before = displayText.slice(0, caretPos);
+				const after = displayText.slice(caretPos);
 
 				// Hardware cursor marker (zero-width, emitted before fake cursor for IME positioning)
 				const marker = emitCursorMarker ? CURSOR_MARKER : "";
@@ -1916,6 +1926,18 @@ export class Editor implements Component, Focusable {
 
 		if (deltaCol !== 0) {
 			const currentLine = this.state.lines[this.state.cursorLine] || "";
+
+			// In RTL text "right" is a smaller logical index: the caret walks through
+			// the painted line, not the stored string. Lines without RTL get undefined
+			// here and keep the logical movement below, unchanged.
+			const visualCol = hasStrongRtl(currentLine)
+				? stepCaretVisual(currentLine, this.state.cursorCol, deltaCol > 0 ? 1 : -1)
+				: undefined;
+			if (visualCol !== undefined) {
+				this.setCursorCol(visualCol);
+				if (this.autocompleteState) this.updateAutocomplete();
+				return;
+			}
 
 			if (deltaCol > 0) {
 				// Moving right - move by one grapheme (handles emojis, combining characters, etc.)

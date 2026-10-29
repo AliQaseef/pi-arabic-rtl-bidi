@@ -14,6 +14,34 @@ Minimal terminal UI framework with differential rendering and synchronized outpu
 - **Built-in Components**: Text, TruncatedText, Input, Editor, Markdown, Loader, SelectList, SettingsList, MouseRegion, Spacer, Image, Box, Container, VStack, HStack, ScrollView
 - **Inline Images**: Renders images in terminals that support Kitty or iTerm2 graphics protocols
 - **Autocomplete Support**: File paths and slash commands
+- **Bidirectional Text**: Right-to-left lines are reordered for display while text stays logical
+
+## Bidirectional (RTL) Text
+
+Terminals such as Windows Terminal paint cells in the order the program writes them; they do not
+implement the Unicode Bidirectional Algorithm. A line stored in logical order - the order every
+editor, clipboard and search uses - therefore appears mirrored. `src/bidi.ts` fixes that at the
+painting layer:
+
+- `reorderLine(line)` converts one rendered line from logical order into visual order, using
+  `bidi-js` for the embedding levels and reversing runs per UAX #9 L2. Graphemes are the unit, so
+  a letter and its combining marks travel as one cell; brackets are mirrored; leading and trailing
+  whitespace is anchored so indentation and padding do not move.
+- `reorderLineWithCaret(line, caretOffset)` models the caret as a zero-width cell inside its run so
+  it lands on the correct visual side of the grapheme it precedes. `stepCaretVisual()` maps an
+  arrow-key step in visual direction back to a logical offset.
+- Only the string written to the terminal changes. State, caret positions, wrapping, selection and
+  copy stay logical.
+- Lines without a strong RTL character return unchanged, byte for byte, so English rendering is
+  identical to before. Styling and OSC 8 hyperlinks travel with their grapheme; positional escapes
+  (cursor movement, the editor cursor marker) are never moved.
+- `configureBidi({ enabled, align })` controls it. `enabled` defaults to true; `align` (right-align
+  RTL lines) defaults to false because alignment touches padding, the scrollbar gutter and overlay
+  compositing.
+
+Tests: `test/bidi.test.ts` (engine, including a check against `bidi-js`'s own reordering),
+`test/bidi-markdown.test.ts`, `test/bidi-text.test.ts`, `test/bidi-editor.test.ts` (caret and
+arrow keys through the virtual terminal).
 
 ## Quick Start
 

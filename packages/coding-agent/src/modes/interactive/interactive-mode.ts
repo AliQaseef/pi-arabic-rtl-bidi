@@ -34,6 +34,7 @@ import {
 	CombinedAutocompleteProvider,
 	type Component,
 	Container,
+	configureBidi,
 	fuzzyFilter,
 	getCapabilities,
 	hyperlink,
@@ -618,6 +619,7 @@ export class InteractiveMode {
 	constructor(runtimeHost: AgentSessionRuntime, options: InteractiveModeOptions = {}) {
 		this.runtimeHost = runtimeHost;
 		setCapabilityOverrides(this.settingsManager.getTerminalCapabilityOverrides());
+		configureBidi(this.settingsManager.getRtlSettings());
 		const tuiMode = options.tuiMode ?? this.settingsManager.getTuiMode();
 		this.options = { ...options, tuiMode };
 		this.autoTrustOnReloadCwd = options.autoTrustOnReloadCwd;
@@ -5048,6 +5050,8 @@ export class InteractiveMode {
 					quietStartup: this.settingsManager.getQuietStartup(),
 					clearOnShrink: this.settingsManager.getClearOnShrink(),
 					showTerminalProgress: this.settingsManager.getShowTerminalProgress(),
+					rtlEnabled: this.settingsManager.getRtlSettings().enabled,
+					rtlAlign: this.settingsManager.getRtlSettings().align,
 					tuiMode: this.ui.mode,
 					fullscreenExitOutput: this.settingsManager.getFullscreenExitOutput(),
 					fullscreenScrollbar: this.settingsManager.getFullscreenScrollbar(),
@@ -5205,6 +5209,18 @@ export class InteractiveMode {
 					},
 					onShowTerminalProgressChange: (enabled) => {
 						this.settingsManager.setShowTerminalProgress(enabled);
+					},
+					onRtlEnabledChange: (enabled) => {
+						this.settingsManager.setRtlEnabled(enabled);
+						configureBidi(this.settingsManager.getRtlSettings());
+						this.ui.invalidate();
+						this.ui.requestRender();
+					},
+					onRtlAlignChange: (enabled) => {
+						this.settingsManager.setRtlAlign(enabled);
+						configureBidi(this.settingsManager.getRtlSettings());
+						this.ui.invalidate();
+						this.ui.requestRender();
 					},
 					onTuiModeChange: (mode) => {
 						if (!this.switchTuiMode(mode)) {

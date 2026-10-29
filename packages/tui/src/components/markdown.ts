@@ -1,5 +1,6 @@
 import { Marked, type Token, Tokenizer, type TokenizerExtension, type Tokens, type TokensList } from "marked";
 import markedCjkFriendly from "marked-cjk-friendly";
+import { alignRight, detectBaseDirection, getBidiSettings, hasStrongRtl, reorderLine } from "../bidi.ts";
 import { renderLatex } from "../latex.ts";
 import { getCapabilities, hyperlink, isImageLine } from "../terminal-image.ts";
 import type { Component } from "../tui.ts";
@@ -422,13 +423,26 @@ export class Markdown implements Component {
 		const leftMargin = " ".repeat(this.paddingX);
 		const rightMargin = " ".repeat(this.paddingX);
 		const bgFn = this.defaultTextStyle?.bgColor;
+		// Code, tables, blockquote borders and list markers are chrome: their content is
+		// reordered where the content is produced, so the border or marker never moves.
+		const reorderable =
+			token.type !== "code" && token.type !== "table" && token.type !== "blockquote" && token.type !== "list";
 		const lines: string[] = [];
 		for (const line of this.renderToken(token, contentWidth, nextTokenType)) {
 			if (isImageLine(line)) {
 				lines.push(line);
 				continue;
 			}
-			for (const wrappedLine of wrapTextWithAnsi(line, contentWidth)) {
+			// Wrapping runs on logical text; each visual line is then reordered separately.
+			for (const wrapped of wrapTextWithAnsi(line, contentWidth)) {
+				let wrappedLine = wrapped;
+				if (reorderable && hasStrongRtl(wrappedLine)) {
+					const visual = reorderLine(wrappedLine);
+					wrappedLine =
+						getBidiSettings().align && detectBaseDirection(wrappedLine) === "rtl"
+							? alignRight(visual, contentWidth)
+							: visual;
+				}
 				const lineWithMargins = leftMargin + wrappedLine + rightMargin;
 				if (bgFn) {
 					lines.push(applyBackgroundToLine(lineWithMargins, width, bgFn));
@@ -698,7 +712,7 @@ export class Markdown implements Component {
 					const styledLine = applyQuoteStyle(quoteLine);
 					const wrappedLines = wrapTextWithAnsi(styledLine, quoteContentWidth);
 					for (const wrappedLine of wrappedLines) {
-						lines.push(this.theme.quoteBorder("│ ") + wrappedLine);
+						lines.push(this.theme.quoteBorder("│ ") + reorderLine(wrappedLine));
 					}
 				}
 				if (nextTokenType && nextTokenType !== "space") {
@@ -892,7 +906,7 @@ export class Markdown implements Component {
 				for (const line of itemLines) {
 					for (const wrappedLine of wrapTextWithAnsi(line, itemWidth)) {
 						const linePrefix = renderedAnyLine ? continuationPrefix : firstPrefix;
-						lines.push(linePrefix + wrappedLine);
+						lines.push(linePrefix + reorderLine(wrappedLine));
 						renderedAnyLine = true;
 					}
 				}

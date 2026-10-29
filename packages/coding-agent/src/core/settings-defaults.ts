@@ -37,6 +37,10 @@ export const SETTINGS_DEFAULTS = {
 		imageWidthCells: 60,
 		clearOnShrink: false,
 		showTerminalProgress: false,
+		rtl: {
+			enabled: true,
+			align: false,
+		},
 	},
 	images: {
 		autoResize: true,

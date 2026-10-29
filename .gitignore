@@ -46,3 +46,8 @@ plans/
 .pi/settings.json
 collect.sh
 packages/agent/docs/extensions/pi-server-artifact/index.md
+
+# Local scratch: probe scripts, screenshots and logs for bidi work
+.scratch/
+*.png
+bun.lock
