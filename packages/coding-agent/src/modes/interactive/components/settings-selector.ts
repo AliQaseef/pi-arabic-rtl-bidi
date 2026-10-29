@@ -891,7 +891,7 @@ export class SettingsSelectorComponent extends Container {
 		const rtlIndex = items.findIndex((item) => item.id === "rtl-reorder");
 		items.splice(rtlIndex + 1, 0, {
 			id: "rtl-align",
-			label: "Align to the reading edge",
+			description: "Arabic, Hebrew and Persian lines, markers, quote bars and tables go to the right; English stays left",
 			description: "Arabic, Hebrew and Persian lines go to the right; English and English-dominant mixed lines stay left",
 			currentValue: config.rtlAlign ? "true" : "false",
 			values: ["true", "false"],
