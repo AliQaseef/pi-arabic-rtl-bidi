@@ -720,8 +720,13 @@ export class Markdown implements Component {
 				for (const quoteLine of renderedQuoteLines) {
 					const styledLine = applyQuoteStyle(quoteLine);
 					const wrappedLines = wrapTextWithAnsi(styledLine, quoteContentWidth);
-					for (const wrappedLine of wrappedLines) {
+				for (const wrappedLine of wrappedLines) {
+					if (getBidiSettings().align && dominantDirection(wrappedLine) === "rtl") {
+						// In RTL the quote bar marks the reading edge, so it sits on the right.
+						lines.push(paintVisual(wrappedLine, quoteContentWidth) + this.theme.quoteBorder(" │"));
+					} else {
 						lines.push(this.theme.quoteBorder("│ ") + paintVisual(wrappedLine, quoteContentWidth));
+					}
 					}
 				}
 				if (nextTokenType && nextTokenType !== "space") {
@@ -914,8 +919,23 @@ export class Markdown implements Component {
 				const itemLines = this.renderToken(itemToken, itemWidth, undefined, styleContext);
 				for (const line of itemLines) {
 					for (const wrappedLine of wrapTextWithAnsi(line, itemWidth)) {
-						const linePrefix = renderedAnyLine ? continuationPrefix : firstPrefix;
+						if (getBidiSettings().align && dominantDirection(wrappedLine) === "rtl") {
+							// The marker marks the reading edge: in RTL it sits at the right and
+							// the item text hangs to its left. Continuation lines keep the same
+							// content edge, inset by the width of the marker.
+							const prefix = renderedAnyLine
+								? indent + " ".repeat(visibleWidth(marker))
+								: indent;
+							// The marker itself is mirrored: its padding moves to the left so the
+							// bullet or number sits on the right edge, next to the text it marks.
+							const mirroredMarker = " " + marker.trimEnd();
+							const suffix = renderedAnyLine ? " ".repeat(visibleWidth(marker)) : this.theme.listBullet(mirroredMarker);
+							const region = Math.max(1, width - visibleWidth(prefix) - visibleWidth(suffix));
+							lines.push(prefix + paintVisual(wrappedLine, region) + suffix);
+						} else {
+							const linePrefix = renderedAnyLine ? continuationPrefix : firstPrefix;
 							lines.push(linePrefix + paintVisual(wrappedLine, itemWidth));
+						}
 						renderedAnyLine = true;
 					}
 				}

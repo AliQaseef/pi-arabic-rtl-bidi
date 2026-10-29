@@ -150,4 +150,26 @@ describe("alignment follows the script that dominates the line", () => {
 		assert.ok(lines.every((line) => visibleWidth(line) === 30), lines.map((line) => visibleWidth(line)).join(","));
 		configureBidi({ enabled: true, align: false });
 	});
+
+	it("puts the marker on the reading edge of an RTL list item", () => {
+		configureBidi({ enabled: true, align: true });
+		const lines = new Markdown("- عنصر قصير\n- عنصر آخر", 0, 0, defaultMarkdownTheme).render(20);
+		assert.ok(stripAnsi(lines[0]).trimEnd().endsWith("-"), lines[0]);
+		assert.ok(!stripAnsi(lines[0]).startsWith("- "), lines[0]);
+		assert.ok(stripAnsi(lines[1]).trimEnd().endsWith("-"), lines[1]);
+		assert.ok(lines.every((line) => visibleWidth(line) === 20), lines.join("|"));
+
+		// An item whose text is mostly English keeps its marker on the left.
+		const english = new Markdown("- npm install the package now", 0, 0, defaultMarkdownTheme).render(40)[0];
+		assert.ok(stripAnsi(english).startsWith("- "), english);
+		configureBidi({ enabled: true, align: false });
+	});
+
+	it("puts the blockquote bar on the reading edge of an RTL quote", () => {
+		configureBidi({ enabled: true, align: true });
+		const line = new Markdown("> اقتباس عربي", 0, 0, defaultMarkdownTheme).render(20)[0];
+		assert.ok(stripAnsi(line).trimEnd().endsWith("│"), line);
+		assert.equal(visibleWidth(line), 20, line);
+		configureBidi({ enabled: true, align: false });
+	});
 });
