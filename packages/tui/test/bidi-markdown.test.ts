@@ -2,7 +2,7 @@ import assert from "node:assert";
 import { describe, it } from "node:test";
 import { configureBidi, reorderLine } from "../src/bidi.ts";
 import { Markdown } from "../src/components/markdown.ts";
-import { wrapTextWithAnsi } from "../src/utils.ts";
+import { visibleWidth, wrapTextWithAnsi } from "../src/utils.ts";
 import { defaultMarkdownTheme } from "./test-themes.ts";
 import { VirtualTerminal } from "./virtual-terminal.ts";
 
@@ -46,6 +46,26 @@ describe("Arabic in the markdown renderer", () => {
 		const lines = renderMarkdown("- مرحبا\n- عالم", 40);
 		assert.ok(lines[0].startsWith("- "), lines[0]);
 		assert.ok(lines[1].startsWith("- "), lines[1]);
+	});
+
+	it("keeps the table grid while reordering cell content", () => {
+		const lines = renderMarkdown("| عربي | English |\n|------|---------|\n| مرحبا | hello |", 40);
+		assert.ok(
+			lines.some((line) => line.startsWith("┌─")),
+			lines[0],
+		);
+		const header = lines.find((line) => line.includes("│"))!;
+		// The cell text travels; the column widths and the │ do not.
+		assert.ok(header.includes("يبرع"), header);
+		assert.ok(header.includes("English"), header);
+		assert.equal(visibleWidth(header.replace(/\x1b\[[0-9;]*m/g, "")), visibleWidth(lines[2]), header);
+	});
+
+	it("reorders Hebrew and Persian inside the borders of a blockquote", () => {
+		const lines = renderMarkdown("> שלום hello\n> این خط فارسی است", 40);
+		assert.ok(lines[0].startsWith("│ "), lines[0]);
+		assert.ok(!lines[0].includes("שלום"), lines[0]);
+		assert.ok(lines[1].startsWith("│ "), lines[1]);
 	});
 
 	it("writes the reordered cells into the terminal buffer", async () => {

@@ -1088,7 +1088,8 @@ export class Markdown implements Component {
 
 		for (let lineIdx = 0; lineIdx < headerLineCount; lineIdx++) {
 			const rowParts = headerCellLines.map((cellLines, colIdx) => {
-				const text = cellLines[lineIdx] || "";
+				// Cell content is painted in visual order; the grid and the padding stay put.
+				const text = reorderLine(cellLines[lineIdx] || "");
 				const padded = text + " ".repeat(Math.max(0, columnWidths[colIdx] - visibleWidth(text)));
 				return this.theme.bold(padded);
 			});
@@ -1111,7 +1112,7 @@ export class Markdown implements Component {
 
 			for (let lineIdx = 0; lineIdx < rowLineCount; lineIdx++) {
 				const rowParts = rowCellLines.map((cellLines, colIdx) => {
-					const text = cellLines[lineIdx] || "";
+					const text = reorderLine(cellLines[lineIdx] || "");
 					return text + " ".repeat(Math.max(0, columnWidths[colIdx] - visibleWidth(text)));
 				});
 				lines.push(`│ ${rowParts.join(" │ ")} │`);
