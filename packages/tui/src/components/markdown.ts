@@ -4,7 +4,7 @@ import { alignRight, dominantDirection, getBidiSettings, hasStrongRtl, reorderLi
 import { renderLatex } from "../latex.ts";
 import { getCapabilities, hyperlink, isImageLine } from "../terminal-image.ts";
 import type { Component } from "../tui.ts";
-import { applyBackgroundToLine, cjkPunctuationRegex, flattenLines, visibleWidth, wrapTextWithAnsi } from "../utils.ts";
+import { applyBackgroundToLine, cjkPunctuationRegex, flattenLines, getGraphemeSegmenter, visibleWidth, wrapTextWithAnsi } from "../utils.ts";
 
 const STRICT_STRIKETHROUGH_REGEX = /^(~~)(?=[^\s~])((?:\\.|[^\\])*?(?:\\.|[^\s~\\]))\1(?=[^~]|$)/;
 
@@ -29,6 +29,16 @@ class MarkdownTokenizer extends Tokenizer {
 function paintVisual(text: string, width: number): string {
 	const visual = reorderLine(text);
 	return getBidiSettings().align && dominantDirection(text) === "rtl" ? alignRight(visual, width) : visual;
+}
+
+/**
+ * Paint a list marker the way an RTL reader sees it: the gap on the inner side,
+ * the dash or the number against the reading edge. "1." becomes " .1", so the
+ * digit is the last cell of the line and the dot sits to its left.
+ */
+function mirrorMarker(marker: string): string {
+	const graphemes = [...getGraphemeSegmenter().segment(marker.trimEnd())].map((segment) => segment.segment);
+	return " " + graphemes.reverse().join("");
 }
 
 class StrictStrikethroughTokenizer extends Tokenizer {
@@ -926,9 +936,7 @@ export class Markdown implements Component {
 							const prefix = renderedAnyLine
 								? indent + " ".repeat(visibleWidth(marker))
 								: indent;
-							// The marker itself is mirrored: its padding moves to the left so the
-							// bullet or number sits on the right edge, next to the text it marks.
-							const mirroredMarker = " " + marker.trimEnd();
+							const mirroredMarker = mirrorMarker(marker);
 							const suffix = renderedAnyLine ? " ".repeat(visibleWidth(marker)) : this.theme.listBullet(mirroredMarker);
 							const region = Math.max(1, width - visibleWidth(prefix) - visibleWidth(suffix));
 							lines.push(prefix + paintVisual(wrappedLine, region) + suffix);
@@ -1104,6 +1112,18 @@ export class Markdown implements Component {
 			}
 		}
 
+		// A table reads the way the text around it reads. For an RTL-dominant table
+		// the first logical column is painted at the right, and the grid hugs the
+		// right edge of the column instead of the left.
+		const tableText = [token.header, ...token.rows]
+			.map((cells) => cells.map((cell) => cell.text ?? "").join(" "))
+			.join(" ");
+		const rtlTable = getBidiSettings().align && dominantDirection(tableText) === "rtl";
+		if (rtlTable) {
+			token = { ...token, header: [...token.header].reverse(), rows: token.rows.map((row) => [...row].reverse()) };
+			columnWidths = [...columnWidths].reverse();
+		}
+
 		// Render top border
 		const topBorderCells = columnWidths.map((w) => "─".repeat(w));
 		lines.push(`┌─${topBorderCells.join("─┬─")}─┐`);
@@ -1155,6 +1175,12 @@ export class Markdown implements Component {
 		// Render bottom border
 		const bottomBorderCells = columnWidths.map((w) => "─".repeat(w));
 		lines.push(`└─${bottomBorderCells.join("─┴─")}─┘`);
+
+		if (rtlTable) {
+			for (let i = 0; i < lines.length; i++) {
+				if (lines[i].includes("│") || lines[i].includes("─")) lines[i] = alignRight(lines[i], availableWidth);
+			}
+		}
 
 		if (nextTokenType && nextTokenType !== "space") {
 			lines.push(""); // Add spacing after table

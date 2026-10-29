@@ -172,4 +172,19 @@ describe("alignment follows the script that dominates the line", () => {
 		assert.equal(visibleWidth(line), 20, line);
 		configureBidi({ enabled: true, align: false });
 	});
+
+	it("mirrors an RTL table's columns and hugs the grid to the right edge", () => {
+		configureBidi({ enabled: true, align: true });
+		const lines = new Markdown("| الأمر | البديل |\n|---|---|\n| grep -r | rg |", 0, 0, defaultMarkdownTheme).render(30);
+		const grid = lines[0];
+		assert.ok(stripAnsi(grid).startsWith(" "), grid);
+		assert.ok(!stripAnsi(grid).startsWith("┌"), grid);
+		assert.ok(grid.includes("┐"), grid);
+		assert.ok(!grid.includes("┐ "), grid); // the grid ends flush with the column edge
+
+		const header = lines[1];
+		// The logical first column is painted on the right, its content still in visual order.
+		assert.ok(header.indexOf("ليدبلا") < header.indexOf("رمألا"), header);
+		configureBidi({ enabled: true, align: false });
+	});
 });
