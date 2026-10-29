@@ -139,7 +139,7 @@ index b17bab5..5509945 100644
  
  const ImageSettingsSchema = Type.Object({
 diff --git a/packages/coding-agent/src/modes/interactive/components/settings-selector.ts b/packages/coding-agent/src/modes/interactive/components/settings-selector.ts
-index e0cca78..6ff0033 100644
+index e0cca78..e5f2f90 100644
 --- a/packages/coding-agent/src/modes/interactive/components/settings-selector.ts
 +++ b/packages/coding-agent/src/modes/interactive/components/settings-selector.ts
 @@ -95,6 +95,8 @@ export interface SettingsConfig {
@@ -160,7 +160,7 @@ index e0cca78..6ff0033 100644
  	onTuiModeChange: (mode: TuiMode) => void;
  	onFullscreenExitOutputChange: (output: FullscreenExitOutput) => void;
  	onFullscreenScrollbarChange: (mode: ScrollViewScrollbar) => void;
-@@ -875,6 +879,24 @@ export class SettingsSelectorComponent extends Container {
+@@ -875,6 +879,25 @@ export class SettingsSelectorComponent extends Container {
  			values: ["true", "false"],
  		});
  
@@ -177,7 +177,8 @@ index e0cca78..6ff0033 100644
 +		items.splice(rtlIndex + 1, 0, {
 +			id: "rtl-align",
 +			label: "Align to the reading edge",
-+			description: "Arabic, Hebrew and Persian lines, markers, quote bars and tables go to the right; English stays left",
++			description:
++				"Arabic, Hebrew and Persian lines, markers, quote bars and tables go to the right; English stays left",
 +			currentValue: config.rtlAlign ? "true" : "false",
 +			values: ["true", "false"],
 +		});
@@ -185,7 +186,7 @@ index e0cca78..6ff0033 100644
  		// Add borders
  		this.addChild(new DynamicBorder());
  
-@@ -975,6 +997,12 @@ export class SettingsSelectorComponent extends Container {
+@@ -975,6 +998,12 @@ export class SettingsSelectorComponent extends Container {
  					case "terminal-progress":
  						callbacks.onShowTerminalProgressChange(newValue === "true");
  						break;
@@ -820,16 +821,23 @@ index 0000000..2e92c88
 +	return padding > 0 ? " ".repeat(padding) + line : line;
 +}
 diff --git a/packages/tui/src/components/editor.ts b/packages/tui/src/components/editor.ts
-index 5d453e3..8ea93a2 100644
+index 5d453e3..e53b4e3 100644
 --- a/packages/tui/src/components/editor.ts
 +++ b/packages/tui/src/components/editor.ts
-@@ -1,4 +1,5 @@
+@@ -1,4 +1,12 @@
  import type { AutocompleteProvider, AutocompleteSuggestions } from "../autocomplete.ts";
-+import { dominantDirection, getBidiSettings, hasStrongRtl, reorderLine, reorderLineWithCaret, stepCaretVisual } from "../bidi.ts";
++import {
++	dominantDirection,
++	getBidiSettings,
++	hasStrongRtl,
++	reorderLine,
++	reorderLineWithCaret,
++	stepCaretVisual,
++} from "../bidi.ts";
  import { getKeybindings } from "../keybindings.ts";
  import { decodePrintableKey, matchesKey } from "../keys.ts";
  import { KillRing } from "../kill-ring.ts";
-@@ -570,14 +571,23 @@ export class Editor implements Component, Focusable {
+@@ -570,14 +578,23 @@ export class Editor implements Component, Focusable {
  		const emitCursorMarker = this.focused;
  
  		for (const layoutLine of visibleLines) {
@@ -843,7 +851,7 @@ index 5d453e3..8ea93a2 100644
 +				: undefined;
 +
 +			let displayText = painted ? painted.line : layoutLine.text;
-+			let caretPos = painted ? painted.caretOffset : layoutLine.cursorPos;
++			const caretPos = painted ? painted.caretOffset : layoutLine.cursorPos;
  			let lineVisibleWidth = visibleWidth(layoutLine.text);
  			let cursorInPadding = false;
  
@@ -857,7 +865,7 @@ index 5d453e3..8ea93a2 100644
  
  				// Hardware cursor marker (zero-width, emitted before fake cursor for IME positioning)
  				const marker = emitCursorMarker ? CURSOR_MARKER : "";
-@@ -604,11 +614,18 @@ export class Editor implements Component, Focusable {
+@@ -604,11 +621,20 @@ export class Editor implements Component, Focusable {
  			}
  
  			// Calculate padding based on actual visible width
@@ -874,11 +882,13 @@ index 5d453e3..8ea93a2 100644
 +
  			// Render the line (no side borders, just horizontal lines above and below)
 -			result.push(`${leftPadding}${displayText}${padding}${lineRightPadding}`);
-+			result.push(`${leftPadding}${hugRight ? padding : ""}${displayText}${hugRight ? "" : padding}${lineRightPadding}`);
++			result.push(
++				`${leftPadding}${hugRight ? padding : ""}${displayText}${hugRight ? "" : padding}${lineRightPadding}`,
++			);
  		}
  
  		// Render bottom border (with scroll indicator if more content below)
-@@ -667,7 +684,14 @@ export class Editor implements Component, Focusable {
+@@ -667,7 +693,14 @@ export class Editor implements Component, Focusable {
  		const chunk = logicalLine.slice(visualLine.startCol, chunkEnd);
  		const maxPadding = Math.max(0, Math.floor((event.width - 1) / 2));
  		const paddingX = Math.min(this.paddingX, maxPadding);
@@ -894,7 +904,7 @@ index 5d453e3..8ea93a2 100644
  		let visibleColumn = 0;
  		let targetIndex = chunk.length;
  		let lastGraphemeIndex = 0;
-@@ -1907,6 +1931,18 @@ export class Editor implements Component, Focusable {
+@@ -1907,6 +1940,18 @@ export class Editor implements Component, Focusable {
  		if (deltaCol !== 0) {
  			const currentLine = this.state.lines[this.state.cursorLine] || "";
  
@@ -914,7 +924,7 @@ index 5d453e3..8ea93a2 100644
  				// Moving right - move by one grapheme (handles emojis, combining characters, etc.)
  				if (this.state.cursorCol < currentLine.length) {
 diff --git a/packages/tui/src/components/markdown.ts b/packages/tui/src/components/markdown.ts
-index aa21662..36fa4e1 100644
+index aa21662..7d9372d 100644
 --- a/packages/tui/src/components/markdown.ts
 +++ b/packages/tui/src/components/markdown.ts
 @@ -1,12 +1,34 @@
@@ -1001,19 +1011,17 @@ index aa21662..36fa4e1 100644
  				}
  			}
  		}
-@@ -624,8 +660,13 @@ export class Markdown implements Component {
- 				for (const quoteLine of renderedQuoteLines) {
+@@ -625,7 +661,12 @@ export class Markdown implements Component {
  					const styledLine = applyQuoteStyle(quoteLine);
  					const wrappedLines = wrapTextWithAnsi(styledLine, quoteContentWidth);
--					for (const wrappedLine of wrappedLines) {
+ 					for (const wrappedLine of wrappedLines) {
 -						lines.push(this.theme.quoteBorder("│ ") + wrappedLine);
-+				for (const wrappedLine of wrappedLines) {
-+					if (getBidiSettings().align && dominantDirection(wrappedLine) === "rtl") {
-+						// In RTL the quote bar marks the reading edge, so it sits on the right.
-+						lines.push(paintVisual(wrappedLine, quoteContentWidth) + this.theme.quoteBorder(" │"));
-+					} else {
-+						lines.push(this.theme.quoteBorder("│ ") + paintVisual(wrappedLine, quoteContentWidth));
-+					}
++						if (getBidiSettings().align && dominantDirection(wrappedLine) === "rtl") {
++							// In RTL the quote bar marks the reading edge, so it sits on the right.
++							lines.push(paintVisual(wrappedLine, quoteContentWidth) + this.theme.quoteBorder(" │"));
++						} else {
++							lines.push(this.theme.quoteBorder("│ ") + paintVisual(wrappedLine, quoteContentWidth));
++						}
  					}
  				}
  				if (nextTokenType && nextTokenType !== "space") {
@@ -1027,11 +1035,11 @@ index aa21662..36fa4e1 100644
 +							// The marker marks the reading edge: in RTL it sits at the right and
 +							// the item text hangs to its left. Continuation lines keep the same
 +							// content edge, inset by the width of the marker.
-+							const prefix = renderedAnyLine
-+								? indent + " ".repeat(visibleWidth(marker))
-+								: indent;
++							const prefix = renderedAnyLine ? indent + " ".repeat(visibleWidth(marker)) : indent;
 +							const mirroredMarker = mirrorMarker(marker);
-+							const suffix = renderedAnyLine ? " ".repeat(visibleWidth(marker)) : this.theme.listBullet(mirroredMarker);
++							const suffix = renderedAnyLine
++								? " ".repeat(visibleWidth(marker))
++								: this.theme.listBullet(mirroredMarker);
 +							const region = Math.max(1, width - visibleWidth(prefix) - visibleWidth(suffix));
 +							lines.push(prefix + paintVisual(wrappedLine, region) + suffix);
 +						} else {
@@ -1093,7 +1101,7 @@ index aa21662..36fa4e1 100644
  			lines.push(""); // Add spacing after table
  		}
 diff --git a/packages/tui/src/components/text.ts b/packages/tui/src/components/text.ts
-index 0247489..1b9057c 100644
+index 0247489..5bc717f 100644
 --- a/packages/tui/src/components/text.ts
 +++ b/packages/tui/src/components/text.ts
 @@ -1,3 +1,4 @@
@@ -1101,7 +1109,7 @@ index 0247489..1b9057c 100644
  import type { Component } from "../tui.ts";
  import { applyBackgroundToLine, flattenLines, visibleWidth, wrapTextWithAnsi } from "../utils.ts";
  
-@@ -69,8 +70,13 @@ export class Text implements Component {
+@@ -69,8 +70,15 @@ export class Text implements Component {
  		const paddingX = Math.min(this.paddingX, Math.max(0, Math.floor((width - 1) / 2)));
  		const contentWidth = Math.max(1, width - paddingX * 2);
  
@@ -1112,13 +1120,15 @@ index 0247489..1b9057c 100644
 +		// pushed to the edge its dominant script reads from.
 +		const wrappedLines = wrapTextWithAnsi(normalizedText, contentWidth).map((line) => {
 +			const visual = reorderLine(line);
-+			return getBidiSettings().align && dominantDirection(line) === "rtl" ? alignRight(visual, contentWidth) : visual;
++			return getBidiSettings().align && dominantDirection(line) === "rtl"
++				? alignRight(visual, contentWidth)
++				: visual;
 +		});
  
  		// Add margins and background to each line
  		const leftMargin = " ".repeat(paddingX);
 diff --git a/packages/tui/src/components/truncated-text.ts b/packages/tui/src/components/truncated-text.ts
-index c26b889..13219cf 100644
+index c26b889..53a29b4 100644
 --- a/packages/tui/src/components/truncated-text.ts
 +++ b/packages/tui/src/components/truncated-text.ts
 @@ -1,3 +1,4 @@
@@ -1126,7 +1136,7 @@ index c26b889..13219cf 100644
  import type { Component } from "../tui.ts";
  import { truncateToWidth, visibleWidth } from "../utils.ts";
  
-@@ -40,8 +41,11 @@ export class TruncatedText implements Component {
+@@ -40,8 +41,14 @@ export class TruncatedText implements Component {
  			singleLineText = this.text.substring(0, newlineIndex);
  		}
  
@@ -1136,7 +1146,10 @@ index c26b889..13219cf 100644
 +		// pushed to the edge its dominant script reads from.
 +		const truncated = truncateToWidth(singleLineText, availableWidth);
 +		const visual = reorderLine(truncated);
-+		const displayText = getBidiSettings().align && dominantDirection(truncated) === "rtl" ? alignRight(visual, availableWidth) : visual;
++		const displayText =
++			getBidiSettings().align && dominantDirection(truncated) === "rtl"
++				? alignRight(visual, availableWidth)
++				: visual;
  
  		// Add horizontal padding
  		const leftPadding = " ".repeat(this.paddingX);
@@ -1298,10 +1311,10 @@ index 0000000..6e9fa8f
 +});
 diff --git a/packages/tui/test/bidi-markdown.test.ts b/packages/tui/test/bidi-markdown.test.ts
 new file mode 100644
-index 0000000..4729899
+index 0000000..5b91e0b
 --- /dev/null
 +++ b/packages/tui/test/bidi-markdown.test.ts
-@@ -0,0 +1,190 @@
+@@ -0,0 +1,196 @@
 +import assert from "node:assert";
 +import { describe, it } from "node:test";
 +import { configureBidi, reorderLine } from "../src/bidi.ts";
@@ -1394,13 +1407,9 @@ index 0000000..4729899
 +
 +	it("keeps the background fill to the right edge of a reordered line", () => {
 +		configureBidi({ enabled: true, align: false });
-+		const line = new Markdown(
-+			"مرحبا بالعالم **bold**",
-+			1,
-+			0,
-+			defaultMarkdownTheme,
-+			{ bgColor: (text: string) => `\x1b[44m${text}\x1b[49m` },
-+		).render(30)[0];
++		const line = new Markdown("مرحبا بالعالم **bold**", 1, 0, defaultMarkdownTheme, {
++			bgColor: (text: string) => `\x1b[44m${text}\x1b[49m`,
++		}).render(30)[0];
 +
 +		assert.ok(line.includes("ملاعلاب"), line);
 +
@@ -1446,12 +1455,17 @@ index 0000000..4729899
 +
 +	it("never changes the visible width of a wrapped paragraph", () => {
 +		configureBidi({ enabled: true, align: true });
-+		const lines = new Markdown("مرحبا بالعالم هذا اختبار للنص الطويل الذي ينعطف", 0, 0, defaultMarkdownTheme).render(30);
++		const lines = new Markdown("مرحبا بالعالم هذا اختبار للنص الطويل الذي ينعطف", 0, 0, defaultMarkdownTheme).render(
++			30,
++		);
 +		for (const line of lines) {
 +			assert.ok(visibleWidth(line) <= 30, line);
 +		}
 +		// Every line of the paragraph ends at the same column.
-+		assert.ok(lines.every((line) => visibleWidth(line) === 30), lines.map((line) => visibleWidth(line)).join(","));
++		assert.ok(
++			lines.every((line) => visibleWidth(line) === 30),
++			lines.map((line) => visibleWidth(line)).join(","),
++		);
 +		configureBidi({ enabled: true, align: false });
 +	});
 +
@@ -1461,7 +1475,10 @@ index 0000000..4729899
 +		assert.ok(stripAnsi(lines[0]).trimEnd().endsWith("-"), lines[0]);
 +		assert.ok(!stripAnsi(lines[0]).startsWith("- "), lines[0]);
 +		assert.ok(stripAnsi(lines[1]).trimEnd().endsWith("-"), lines[1]);
-+		assert.ok(lines.every((line) => visibleWidth(line) === 20), lines.join("|"));
++		assert.ok(
++			lines.every((line) => visibleWidth(line) === 20),
++			lines.join("|"),
++		);
 +
 +		// An item whose text is mostly English keeps its marker on the left.
 +		const english = new Markdown("- npm install the package now", 0, 0, defaultMarkdownTheme).render(40)[0];
@@ -1479,7 +1496,9 @@ index 0000000..4729899
 +
 +	it("mirrors an RTL table's columns and hugs the grid to the right edge", () => {
 +		configureBidi({ enabled: true, align: true });
-+		const lines = new Markdown("| الأمر | البديل |\n|---|---|\n| grep -r | rg |", 0, 0, defaultMarkdownTheme).render(30);
++		const lines = new Markdown("| الأمر | البديل |\n|---|---|\n| grep -r | rg |", 0, 0, defaultMarkdownTheme).render(
++			30,
++		);
 +		const grid = lines[0];
 +		assert.ok(stripAnsi(grid).startsWith(" "), grid);
 +		assert.ok(!stripAnsi(grid).startsWith("┌"), grid);
