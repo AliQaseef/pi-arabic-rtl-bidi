@@ -891,8 +891,8 @@ export class SettingsSelectorComponent extends Container {
 		const rtlIndex = items.findIndex((item) => item.id === "rtl-reorder");
 		items.splice(rtlIndex + 1, 0, {
 			id: "rtl-align",
-			label: "Right-align RTL lines",
-			description: "Align right-to-left lines to the right edge of the content column",
+			label: "Align to the reading edge",
+			description: "Arabic, Hebrew and Persian lines go to the right; English and English-dominant mixed lines stay left",
 			currentValue: config.rtlAlign ? "true" : "false",
 			values: ["true", "false"],
 		});

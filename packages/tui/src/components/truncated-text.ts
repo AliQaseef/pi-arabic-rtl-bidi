@@ -1,4 +1,4 @@
-import { reorderLine } from "../bidi.ts";
+import { alignRight, dominantDirection, getBidiSettings, reorderLine } from "../bidi.ts";
 import type { Component } from "../tui.ts";
 import { truncateToWidth, visibleWidth } from "../utils.ts";
 
@@ -41,9 +41,11 @@ export class TruncatedText implements Component {
 			singleLineText = this.text.substring(0, newlineIndex);
 		}
 
-		// Truncate text if needed (accounting for ANSI codes). The cut is made in logical
-		// order, then the line is painted in visual order.
-		const displayText = reorderLine(truncateToWidth(singleLineText, availableWidth));
+		// The cut is made in logical order, then the line is painted in visual order and
+		// pushed to the edge its dominant script reads from.
+		const truncated = truncateToWidth(singleLineText, availableWidth);
+		const visual = reorderLine(truncated);
+		const displayText = getBidiSettings().align && dominantDirection(truncated) === "rtl" ? alignRight(visual, availableWidth) : visual;
 
 		// Add horizontal padding
 		const leftPadding = " ".repeat(this.paddingX);

@@ -36,7 +36,7 @@ export type BaseDirection = "ltr" | "rtl";
 export interface BidiSettings {
 	/** Reorder RTL lines into visual order. Off makes rendering exactly what it was before. */
 	enabled: boolean;
-	/** Right-align RTL lines inside the content column. Off by default: alignment touches padding, the scrollbar gutter and overlay compositing. */
+	/** Move a line to the side its dominant script reads from. Off by default: alignment touches padding, the scrollbar gutter and overlay compositing. */
 	align: boolean;
 }
 
@@ -80,9 +80,128 @@ export function detectBaseDirection(text: string, forced?: BaseDirection): BaseD
 	return bidi.getEmbeddingLevels(text, "auto").paragraphs[0].level % 2 === 1 ? "rtl" : "ltr";
 }
 
+/**
+ * Which edge a line should sit against.
+ *
+ * Direction tells how the characters inside a line are ordered; alignment is a
+ * separate question. A line is aligned with the script that dominates it:
+ * English stays at the left edge, Arabic goes to the right edge, and a mixed
+ * line - "npm install ثم build" - follows whichever script has more strong
+ * characters. When the two scripts tie, the first strong character decides, the
+ * same rule UAX #9 uses for direction.
+ *
+ * Undefined means the line has no RTL content at all, so nothing moves.
+ */
+export function dominantDirection(text: string): BaseDirection | undefined {
+	if (!hasStrongRtl(text)) return undefined;
+
+	let rtlCount = 0;
+	let ltrCount = 0;
+	for (const { segment } of getGraphemeSegmenter().segment(text)) {
+		const type = bidi.getBidiCharTypeName(segment[0] ?? "");
+		if (type === "R" || type === "AL") rtlCount++;
+		else if (type === "L") ltrCount++;
+	}
+
+	if (rtlCount === 0) return undefined;
+	if (rtlCount > ltrCount) return "rtl";
+	if (ltrCount > rtlCount) return "ltr";
+	return detectBaseDirection(text);
+}
+
+// The styling that applies to a grapheme, tracked as attributes rather than as a
+// joined string of codes. Reordering a line has to close the attributes that end
+// and open the ones that start; emitting a bare `\x1b[0m` would also clear the
+// background the caller wraps the line in, which leaves the padding black.
+interface SgrState {
+	fg: string;
+	bg: string;
+	bold: boolean;
+	dim: boolean;
+	italic: boolean;
+	underline: boolean;
+	inverse: boolean;
+	link: string;
+}
+
+const defaultState: SgrState = {
+	fg: "",
+	bg: "",
+	bold: false,
+	dim: false,
+	italic: false,
+	underline: false,
+	inverse: false,
+	link: "",
+};
+
+function applySgr(state: SgrState, code: string): SgrState {
+	const next = { ...state };
+	const tokens = code.slice(2, -1).split(";");
+
+	for (let i = 0; i < tokens.length; i++) {
+		const token = tokens[i];
+		if (!token) continue;
+		const value = Number(token);
+
+		if (value === 0) {
+			next.fg = "";
+			next.bg = "";
+			next.bold = false;
+			next.dim = false;
+			next.italic = false;
+			next.underline = false;
+			next.inverse = false;
+		} else if (value === 1) next.bold = true;
+		else if (value === 2) next.dim = true;
+		else if (value === 3) next.italic = true;
+		else if (value === 4) next.underline = true;
+		else if (value === 7) next.inverse = true;
+		else if (value === 22) next.bold = false;
+		else if (value === 23) next.italic = false;
+		else if (value === 24) next.underline = false;
+		else if (value === 27) next.inverse = false;
+		else if (value === 39) next.fg = "";
+		else if (value === 49) next.bg = "";
+		else if (value >= 30 && value <= 37) next.fg = code;
+		else if (value >= 40 && value <= 47) next.bg = code;
+		else if (value === 38 || value === 48) {
+			const full = `\x1b[${tokens.slice(i).join(";")}m`;
+			if (tokens[i + 1] === "5") i += 2;
+			else if (tokens[i + 1] === "2") i += 4;
+			else continue;
+			if (value === 38) next.fg = full;
+			else next.bg = full;
+		}
+	}
+
+	return next;
+}
+
+// Codes that turn an attribute off are specific to it, so the background the
+// caller wrapped the line in survives the transition.
+function sgrTransition(prev: SgrState, next: SgrState): string {
+	let out = "";
+	if (prev.bg !== next.bg) {
+		if (prev.bg) out += "\x1b[49m";
+		if (next.bg) out += next.bg;
+	}
+	if (prev.fg !== next.fg) {
+		if (prev.fg) out += "\x1b[39m";
+		if (next.fg) out += next.fg;
+	}
+	if (prev.bold !== next.bold) out += next.bold ? "\x1b[1m" : "\x1b[22m";
+	if (prev.dim !== next.dim) out += next.dim ? "\x1b[2m" : "\x1b[22m";
+	if (prev.italic !== next.italic) out += next.italic ? "\x1b[3m" : "\x1b[23m";
+	if (prev.underline !== next.underline) out += next.underline ? "\x1b[4m" : "\x1b[24m";
+	if (prev.inverse !== next.inverse) out += next.inverse ? "\x1b[7m" : "\x1b[27m";
+	if (prev.link !== next.link) out += next.link ? `\x1b]8;;${next.link}\x07` : "\x1b]8;;\x07";
+	return out;
+}
+
 interface Cell {
 	grapheme: string;
-	style: string;
+	state: SgrState;
 	level: number;
 	/** Bounds of the grapheme in the logical line, in code units. */
 	logicalStart: number;
@@ -95,54 +214,46 @@ interface Cell {
  * to them. Returns an empty list when the line contains positional escapes
  * that must not move, so the caller leaves the line untouched.
  */
-function parseCells(line: string): Cell[] {
+function parseCells(line: string): { cells: Cell[]; trailing: string } {
 	const cells: Cell[] = [];
-	const activeStyles: string[] = [];
+	let state: SgrState = defaultState;
+	// Escape codes seen since the last grapheme. At the end of the line these are
+	// the closing codes the renderer wrote, and they belong at the end of the line.
+	let pendingCodes = "";
 
 	let index = 0;
 	while (index < line.length) {
 		const ansi = extractAnsiCode(line, index);
 		if (ansi) {
-			if (!movableEscapeRegex.test(ansi.code)) return [];
-			if (ansi.code === "\x1b[0m") {
-				activeStyles.length = 0;
-			} else if (ansi.code.startsWith("\x1b]8;")) {
+			if (!movableEscapeRegex.test(ansi.code)) return { cells: [], trailing: "" };
+			if (ansi.code.startsWith("\x1b]8;")) {
 				const body = ansi.code.slice(4, ansi.code.endsWith("\x07") ? -1 : -2);
-				const url = body.split(";")[1] ?? "";
-				if (url) {
-					activeStyles.push(`\x1b]8;;${url}${ansi.code.endsWith("\x07") ? "\x07" : "\x1b\\"}`);
-				} else {
-					for (let i = activeStyles.length - 1; i >= 0; i--) {
-						if (activeStyles[i].startsWith("\x1b]8;")) {
-							activeStyles.splice(i, 1);
-							break;
-						}
-					}
-				}
+				state = { ...state, link: body.split(";")[1] ?? "" };
 			} else {
-				activeStyles.push(ansi.code);
+				state = applySgr(state, ansi.code);
 			}
+			pendingCodes += ansi.code;
 			index += ansi.length;
 			continue;
 		}
-
 		let end = index;
 		while (end < line.length && !extractAnsiCode(line, end)) end++;
 		let cursor = index;
 		for (const { segment } of getGraphemeSegmenter().segment(line.slice(index, end))) {
 			cells.push({
 				grapheme: segment,
-				style: activeStyles.join(""),
+				state,
 				level: 0,
 				logicalStart: cursor,
 				logicalEnd: cursor + segment.length,
 			});
+			pendingCodes = "";
 			cursor += segment.length;
 		}
 		index = end;
 	}
 
-	return cells;
+	return { cells, trailing: pendingCodes };
 }
 
 /**
@@ -209,19 +320,17 @@ function mirror(grapheme: string): string {
 	return mirrored;
 }
 
-function emitCells(cells: Cell[]): string {
+function emitCells(cells: Cell[], trailing: string): string {
 	let out = "";
-	let emittedStyle = "";
+	let emittedState: SgrState | undefined;
 
 	for (const cell of cells) {
 		if (cell.isCaret) continue;
-		if (cell.style !== emittedStyle) {
-			out += cell.style || "\x1b[0m";
-			emittedStyle = cell.style;
-		}
+		out += sgrTransition(emittedState ?? defaultState, cell.state);
+		emittedState = cell.state;
 		out += cell.level % 2 === 1 ? mirror(cell.grapheme) : cell.grapheme;
 	}
-	return emittedStyle ? `${out}\x1b[0m` : out;
+	return out + trailing;
 }
 
 /**
@@ -232,14 +341,14 @@ function emitCells(cells: Cell[]): string {
 export function reorderLine(line: string, forced?: BaseDirection): string {
 	if (!settings.enabled || !hasStrongRtl(line) || line.includes("\n")) return line;
 
-	const cells = parseCells(line);
-	if (cells.length === 0) return line;
+	const parsed = parseCells(line);
+	if (parsed.cells.length === 0) return line;
 
-	const range = resolveLevels(cells, cells.map((cell) => cell.grapheme).join(""), forced);
+	const range = resolveLevels(parsed.cells, parsed.cells.map((cell) => cell.grapheme).join(""), forced);
 	if (!range) return line;
 
-	reverseRuns(cells, range[0], range[1]);
-	return emitCells(cells);
+	reverseRuns(parsed.cells, range[0], range[1]);
+	return emitCells(parsed.cells, parsed.trailing);
 }
 
 /**
@@ -253,7 +362,7 @@ function insertCaretCell(cells: Cell[], boundary: number): Cell[] {
 	const start = cells[boundary]?.logicalStart ?? cells[boundary - 1]?.logicalEnd ?? 0;
 	withCaret.splice(boundary, 0, {
 		grapheme: "",
-		style: "",
+		state: defaultState,
 		level,
 		logicalStart: start,
 		logicalEnd: start,
@@ -282,30 +391,28 @@ export function reorderLineWithCaret(
 ): { line: string; caretOffset: number } | undefined {
 	if (!settings.enabled || !hasStrongRtl(line) || line.includes("\n")) return undefined;
 
-	const cells = parseCells(line);
-	if (cells.length === 0) return undefined;
+	const parsed = parseCells(line);
+	if (parsed.cells.length === 0) return undefined;
 
-	const range = resolveLevels(cells, line, forced);
+	const range = resolveLevels(parsed.cells, line, forced);
 	if (!range) return undefined;
 
-	const withCaret = insertCaretCell(cells, boundaryAt(cells, caretOffset));
+	const withCaret = insertCaretCell(parsed.cells, boundaryAt(parsed.cells, caretOffset));
 	reverseRuns(withCaret, range[0], range[1]);
 
 	let out = "";
-	let emittedStyle = "";
+	let emittedState: SgrState | undefined;
 	let caretIndex = 0;
 	for (const cell of withCaret) {
 		if (cell.isCaret) {
 			caretIndex = out.length;
 			continue;
 		}
-		if (cell.style !== emittedStyle) {
-			out += cell.style || "\x1b[0m";
-			emittedStyle = cell.style;
-		}
+		out += sgrTransition(emittedState ?? defaultState, cell.state);
+		emittedState = cell.state;
 		out += cell.level % 2 === 1 ? mirror(cell.grapheme) : cell.grapheme;
 	}
-	return { line: emittedStyle ? `${out}\x1b[0m` : out, caretOffset: caretIndex };
+	return { line: out + parsed.trailing, caretOffset: caretIndex };
 }
 
 /**
@@ -323,13 +430,13 @@ export function stepCaretVisual(
 ): number | undefined {
 	if (!settings.enabled || !hasStrongRtl(line) || line.includes("\n")) return undefined;
 
-	const cells = parseCells(line);
-	if (cells.length === 0) return undefined;
+	const parsed = parseCells(line);
+	if (parsed.cells.length === 0) return undefined;
 
-	const range = resolveLevels(cells, line, forced);
+	const range = resolveLevels(parsed.cells, line, forced);
 	if (!range) return undefined;
 
-	const withCaret = insertCaretCell(cells, boundaryAt(cells, caretOffset));
+	const withCaret = insertCaretCell(parsed.cells, boundaryAt(parsed.cells, caretOffset));
 	reverseRuns(withCaret, range[0], range[1]);
 
 	const caretIndex = withCaret.findIndex((cell) => cell.isCaret);

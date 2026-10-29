@@ -39,7 +39,7 @@ export const SETTINGS_DEFAULTS = {
 		showTerminalProgress: false,
 		rtl: {
 			enabled: true,
-			align: false,
+			align: true,
 		},
 	},
 	images: {

@@ -87,4 +87,67 @@ describe("Arabic in the markdown renderer", () => {
 		assert.equal(withBidi[0], "ملاعلاب ابحرم");
 		assert.equal(withoutBidi[0], "مرحبا بالعالم");
 	});
+
+	it("keeps the background fill to the right edge of a reordered line", () => {
+		configureBidi({ enabled: true, align: false });
+		const line = new Markdown(
+			"مرحبا بالعالم **bold**",
+			1,
+			0,
+			defaultMarkdownTheme,
+			{ bgColor: (text: string) => `\x1b[44m${text}\x1b[49m` },
+		).render(30)[0];
+
+		assert.ok(line.includes("ملاعلاب"), line);
+
+		// The background the renderer wraps the line in has to survive the reorder:
+		// a full reset in the middle of the line would leave the padding black.
+		const bgStart = line.indexOf("\x1b[44m");
+		const bgEnd = line.lastIndexOf("\x1b[49m");
+		assert.ok(bgStart >= 0 && bgEnd > bgStart, line);
+		assert.ok(!line.slice(bgStart + 6, bgEnd).includes("\x1b[0m"), line);
+		assert.equal(visibleWidth(line), 30, line);
+	});
+});
+
+describe("alignment follows the script that dominates the line", () => {
+	function renderAligned(markdown: string, width: number): string {
+		configureBidi({ enabled: true, align: true });
+		return new Markdown(markdown, 0, 0, defaultMarkdownTheme).render(width)[0].trimEnd();
+	}
+
+	it("pushes an Arabic line to the right edge", () => {
+		const line = renderAligned("مرحبا بالعالم", 20);
+		assert.equal(stripAnsi(line), "       ملاعلاب ابحرم", line);
+		assert.equal(visibleWidth(line), 20, line);
+	});
+
+	it("leaves an English line at the left edge", () => {
+		const line = renderAligned("hello world", 20);
+		assert.equal(stripAnsi(line), "hello world", line);
+	});
+
+	it("leaves a mixed line with more English than Arabic at the left edge", () => {
+		const line = renderAligned("npm install ثم build the package", 40);
+		assert.ok(line.startsWith("npm install"), line);
+		assert.ok(!line.startsWith(" "), line);
+	});
+
+	it("pushes a mixed line with more Arabic than English to the right edge", () => {
+		const line = renderAligned("مرحبا بالعالم (mixed 1234)", 40);
+		assert.ok(!line.startsWith("npm"), line);
+		assert.ok(visibleWidth(line) === 40, line);
+		assert.ok(stripAnsi(line).startsWith(" "), line);
+	});
+
+	it("never changes the visible width of a wrapped paragraph", () => {
+		configureBidi({ enabled: true, align: true });
+		const lines = new Markdown("مرحبا بالعالم هذا اختبار للنص الطويل الذي ينعطف", 0, 0, defaultMarkdownTheme).render(30);
+		for (const line of lines) {
+			assert.ok(visibleWidth(line) <= 30, line);
+		}
+		// Every line of the paragraph ends at the same column.
+		assert.ok(lines.every((line) => visibleWidth(line) === 30), lines.map((line) => visibleWidth(line)).join(","));
+		configureBidi({ enabled: true, align: false });
+	});
 });

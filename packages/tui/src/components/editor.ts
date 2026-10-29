@@ -1,5 +1,5 @@
 import type { AutocompleteProvider, AutocompleteSuggestions } from "../autocomplete.ts";
-import { hasStrongRtl, reorderLine, reorderLineWithCaret, stepCaretVisual } from "../bidi.ts";
+import { dominantDirection, getBidiSettings, hasStrongRtl, reorderLine, reorderLineWithCaret, stepCaretVisual } from "../bidi.ts";
 import { getKeybindings } from "../keybindings.ts";
 import { decodePrintableKey, matchesKey } from "../keys.ts";
 import { KillRing } from "../kill-ring.ts";
@@ -585,7 +585,7 @@ export class Editor implements Component, Focusable {
 				: undefined;
 
 			let displayText = painted ? painted.line : layoutLine.text;
-			const caretPos = painted ? painted.caretOffset : layoutLine.cursorPos;
+			let caretPos = painted ? painted.caretOffset : layoutLine.cursorPos;
 			let lineVisibleWidth = visibleWidth(layoutLine.text);
 			let cursorInPadding = false;
 
@@ -619,11 +619,18 @@ export class Editor implements Component, Focusable {
 			}
 
 			// Calculate padding based on actual visible width
-			const padding = " ".repeat(Math.max(0, contentWidth - lineVisibleWidth));
+			const paddingWidth = Math.max(0, contentWidth - lineVisibleWidth);
 			const lineRightPadding = cursorInPadding ? rightPadding.slice(1) : rightPadding;
 
+			// A line whose script reads right to left sits against the right edge of the
+			// column, so the empty space goes on its left instead of its right. The
+			// caret marker travels with the text, so the hardware cursor still lands on
+			// the grapheme the caret precedes.
+			const padding = " ".repeat(paddingWidth);
+			const hugRight = getBidiSettings().align && dominantDirection(layoutLine.text) === "rtl";
+
 			// Render the line (no side borders, just horizontal lines above and below)
-			result.push(`${leftPadding}${displayText}${padding}${lineRightPadding}`);
+			result.push(`${leftPadding}${hugRight ? padding : ""}${displayText}${hugRight ? "" : padding}${lineRightPadding}`);
 		}
 
 		// Render bottom border (with scroll indicator if more content below)
@@ -682,7 +689,14 @@ export class Editor implements Component, Focusable {
 		const chunk = logicalLine.slice(visualLine.startCol, chunkEnd);
 		const maxPadding = Math.max(0, Math.floor((event.width - 1) / 2));
 		const paddingX = Math.min(this.paddingX, maxPadding);
-		const targetColumn = Math.max(0, event.x - paddingX);
+		// A right-aligned RTL line starts one padding-width further in, so the click
+		// column has to be measured from the edge the text actually starts at.
+		const contentWidth = Math.max(1, event.width - paddingX * 2);
+		const leadingPad =
+			getBidiSettings().align && dominantDirection(logicalLine) === "rtl"
+				? Math.max(0, contentWidth - visibleWidth(chunk))
+				: 0;
+		const targetColumn = Math.max(0, event.x - paddingX - leadingPad);
 		let visibleColumn = 0;
 		let targetIndex = chunk.length;
 		let lastGraphemeIndex = 0;

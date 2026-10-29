@@ -16,6 +16,7 @@ export {
 	type BidiSettings,
 	configureBidi,
 	detectBaseDirection,
+	dominantDirection,
 	getBidiSettings,
 	hasStrongRtl,
 	reorderLine,

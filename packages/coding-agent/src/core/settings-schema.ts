@@ -112,7 +112,8 @@ const TerminalSettingsSchema = Type.Object({
 			),
 			align: Type.Optional(
 				Type.Boolean({
-					description: "Align RTL lines to the right edge. Only glyph order is reordered in this version.",
+					description:
+						"Put a line against the edge its dominant script reads from: Arabic, Hebrew and Persian lines go right, English stays left, and a mixed line follows whichever script has more strong characters.",
 					default: SETTINGS_DEFAULTS.terminal.rtl.align,
 				}),
 			),

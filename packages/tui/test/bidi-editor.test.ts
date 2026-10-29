@@ -1,5 +1,6 @@
 import assert from "node:assert";
 import { describe, it } from "node:test";
+import { configureBidi } from "../src/bidi.ts";
 import { Editor } from "../src/components/editor.ts";
 import { FAKE_CURSOR_START } from "../src/tui.ts";
 import { TuiMainScreen } from "../src/tui-main-screen.ts";
@@ -68,6 +69,26 @@ describe("RTL in the editor", () => {
 			cursorColumn >= 0 && cursorColumn <= textStart,
 			`caret at column ${cursorColumn}, run starts at ${textStart}`,
 		);
+	});
+
+	it("keeps the caret on the visual edge when the RTL line is right-aligned", () => {
+		configureBidi({ enabled: true, align: true });
+		try {
+			const editor = new Editor(createTestTUI(40), defaultEditorTheme);
+			typeInto(editor, "مرحبا");
+			const line = editor.render(40)[1]!;
+
+			// The run hugs the right edge of the column and the caret still sits at the
+			// left of it, where an RTL reader expects the next character to go.
+			assert.equal(visibleWidth(line), 40, line);
+			const cursorColumn = line.indexOf(FAKE_CURSOR_START);
+			const textStart = line.search(/[ء-ي]/);
+			assert.ok(textStart > 0, `run starts at column ${textStart}`);
+			assert.ok(cursorColumn >= 0 && cursorColumn <= textStart, `caret at ${cursorColumn}, run at ${textStart}`);
+			assert.ok(visibleWidth(line) === 40, line);
+		} finally {
+			configureBidi({ enabled: true, align: false });
+		}
 	});
 
 	it("draws the caret at the left edge of an RTL line, where the text ends", async () => {

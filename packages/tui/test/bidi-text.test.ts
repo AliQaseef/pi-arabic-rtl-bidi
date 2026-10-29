@@ -25,7 +25,7 @@ describe("RTL in Text and TruncatedText", () => {
 	});
 
 	it("truncates logically, then reorders the visual line", () => {
-		const expected = reorderLine(truncateToWidth("مرحبا بالعالم", 8));
+		const expected = stripAnsi(reorderLine(truncateToWidth("مرحبا بالعالم", 8)));
 		const line = stripAnsi(new TruncatedText("مرحبا بالعالم", 0, 0).render(8)[0]);
 		assert.ok(visibleWidth(line) <= 8, line);
 		assert.ok(line.includes("..."), line);

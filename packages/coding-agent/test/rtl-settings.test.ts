@@ -16,9 +16,9 @@ describe("RTL settings", () => {
 		rmSync(testDir, { recursive: true, force: true });
 	});
 
-	it("defaults to reordering on and alignment off", () => {
+	it("defaults to reordering on and edge alignment on", () => {
 		const manager = SettingsManager.create(testDir, agentDir);
-		expect(manager.getRtlSettings()).toEqual({ enabled: true, align: false });
+		expect(manager.getRtlSettings()).toEqual({ enabled: true, align: true });
 	});
 
 	it("persists toggles written from the settings list", async () => {

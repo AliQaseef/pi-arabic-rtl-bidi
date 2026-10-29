@@ -1,7 +1,7 @@
 import assert from "node:assert";
 import { describe, it } from "node:test";
 import bidiModule from "bidi-js";
-import { alignRight, detectBaseDirection, hasStrongRtl, reorderLine } from "../src/bidi.ts";
+import { alignRight, detectBaseDirection, dominantDirection, hasStrongRtl, reorderLine } from "../src/bidi.ts";
 import { visibleWidth } from "../src/utils.ts";
 
 describe("strong script detection", () => {
@@ -73,8 +73,11 @@ describe("reorderLine", () => {
 
 	it("keeps styling with the grapheme it moves", () => {
 		// The meem is the last logical character, so it becomes the first glyph of
-		// the RTL run; the reset that closed the red span must travel with it.
-		assert.equal(reorderLine("\x1b[31mمرحبا\x1b[0m tail"), "tail \x1b[31mابحرم\x1b[0m");
+		// the RTL run; the red that opened the span travels with it. The span is
+		// closed with the code that clears only the foreground, never a full reset,
+		// which would also wipe the background wrapped around the line.
+		assert.equal(reorderLine("\x1b[31mمرحبا\x1b[0m tail"), "tail \x1b[31mابحرم");
+		assert.ok(!reorderLine("\x1b[31mمرحبا\x1b[0m tail").includes("\x1b[0m"));
 	});
 
 	it("keeps hyperlinks attached to their text", () => {
@@ -88,6 +91,20 @@ describe("reorderLine", () => {
 		const line = "مرحبا";
 		assert.equal(visibleWidth(alignRight(line, 20)), 20);
 		assert.ok(alignRight(line, 20).startsWith("   "));
+	});
+
+	it("aligns with the script that dominates the line", () => {
+		// No RTL content means nothing to move: the line stays where it is.
+		assert.equal(dominantDirection("hello world 1234"), undefined);
+		assert.equal(dominantDirection("مرحبا بالعالم"), "rtl");
+		assert.equal(dominantDirection("npm install ثم build the package"), "ltr");
+		assert.equal(dominantDirection("مرحبا بالعالم (mixed 1234)"), "rtl");
+		assert.equal(dominantDirection("مرحبا"), "rtl");
+		assert.equal(dominantDirection("عربي text"), "rtl");
+		// Equal counts fall back to the first strong character, the same rule UAX #9
+		// uses for direction, so the script the line starts with wins.
+		assert.equal(dominantDirection("مرحبا hello"), "rtl");
+		assert.equal(dominantDirection("hello مرحبا"), "ltr");
 	});
 
 	// The reference is bidi-js's own UAX #9 reordering, run on the same graphemes.

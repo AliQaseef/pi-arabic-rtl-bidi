@@ -1,4 +1,4 @@
-import { reorderLine } from "../bidi.ts";
+import { alignRight, dominantDirection, getBidiSettings, reorderLine } from "../bidi.ts";
 import type { Component } from "../tui.ts";
 import { applyBackgroundToLine, flattenLines, visibleWidth, wrapTextWithAnsi } from "../utils.ts";
 
@@ -73,8 +73,12 @@ export class Text implements Component {
 		const contentWidth = Math.max(1, width - paddingX * 2);
 
 		// Wrap text (this preserves ANSI codes but does NOT pad). Wrapping works on the
-		// logical text; each visual line is then reordered separately.
-		const wrappedLines = wrapTextWithAnsi(normalizedText, contentWidth).map((line) => reorderLine(line));
+		// logical text; each visual line is then reordered and, when alignment is on,
+		// pushed to the edge its dominant script reads from.
+		const wrappedLines = wrapTextWithAnsi(normalizedText, contentWidth).map((line) => {
+			const visual = reorderLine(line);
+			return getBidiSettings().align && dominantDirection(line) === "rtl" ? alignRight(visual, contentWidth) : visual;
+		});
 
 		// Add margins and background to each line
 		const leftMargin = " ".repeat(paddingX);

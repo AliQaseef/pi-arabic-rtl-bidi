@@ -1,6 +1,6 @@
 import { Marked, type Token, Tokenizer, type TokenizerExtension, type Tokens, type TokensList } from "marked";
 import markedCjkFriendly from "marked-cjk-friendly";
-import { alignRight, detectBaseDirection, getBidiSettings, hasStrongRtl, reorderLine } from "../bidi.ts";
+import { alignRight, dominantDirection, getBidiSettings, hasStrongRtl, reorderLine } from "../bidi.ts";
 import { renderLatex } from "../latex.ts";
 import { getCapabilities, hyperlink, isImageLine } from "../terminal-image.ts";
 import type { Component } from "../tui.ts";
@@ -19,6 +19,19 @@ class MarkdownTokenizer extends Tokenizer {
 		return punctuationIndex < 0 ? token : super.url(token.raw.slice(0, punctuationIndex));
 	}
 
+
+/**
+ * Paint one line in visual order and, when alignment is on, against the edge its
+ * dominant script reads from. The width is the column the line lives in, so the
+ * padding that fills it stays part of the line - a background wrapped around the
+ * line still covers the whole row.
+ */
+function paintVisual(text: string, width: number): string {
+	const visual = reorderLine(text);
+	return getBidiSettings().align && dominantDirection(text) === "rtl" ? alignRight(visual, width) : visual;
+}
+
+class StrictStrikethroughTokenizer extends Tokenizer {
 	override del(src: string): Tokens.Del | undefined {
 		const match = STRICT_STRIKETHROUGH_REGEX.exec(src);
 		if (!match) {
@@ -437,11 +450,7 @@ export class Markdown implements Component {
 			for (const wrapped of wrapTextWithAnsi(line, contentWidth)) {
 				let wrappedLine = wrapped;
 				if (reorderable && hasStrongRtl(wrappedLine)) {
-					const visual = reorderLine(wrappedLine);
-					wrappedLine =
-						getBidiSettings().align && detectBaseDirection(wrappedLine) === "rtl"
-							? alignRight(visual, contentWidth)
-							: visual;
+					wrappedLine = paintVisual(wrappedLine, contentWidth);
 				}
 				const lineWithMargins = leftMargin + wrappedLine + rightMargin;
 				if (bgFn) {
@@ -712,7 +721,7 @@ export class Markdown implements Component {
 					const styledLine = applyQuoteStyle(quoteLine);
 					const wrappedLines = wrapTextWithAnsi(styledLine, quoteContentWidth);
 					for (const wrappedLine of wrappedLines) {
-						lines.push(this.theme.quoteBorder("│ ") + reorderLine(wrappedLine));
+						lines.push(this.theme.quoteBorder("│ ") + paintVisual(wrappedLine, quoteContentWidth));
 					}
 				}
 				if (nextTokenType && nextTokenType !== "space") {
@@ -906,7 +915,7 @@ export class Markdown implements Component {
 				for (const line of itemLines) {
 					for (const wrappedLine of wrapTextWithAnsi(line, itemWidth)) {
 						const linePrefix = renderedAnyLine ? continuationPrefix : firstPrefix;
-						lines.push(linePrefix + reorderLine(wrappedLine));
+							lines.push(linePrefix + paintVisual(wrappedLine, itemWidth));
 						renderedAnyLine = true;
 					}
 				}
@@ -1089,7 +1098,7 @@ export class Markdown implements Component {
 		for (let lineIdx = 0; lineIdx < headerLineCount; lineIdx++) {
 			const rowParts = headerCellLines.map((cellLines, colIdx) => {
 				// Cell content is painted in visual order; the grid and the padding stay put.
-				const text = reorderLine(cellLines[lineIdx] || "");
+				const text = paintVisual(cellLines[lineIdx] || "", columnWidths[colIdx]);
 				const padded = text + " ".repeat(Math.max(0, columnWidths[colIdx] - visibleWidth(text)));
 				return this.theme.bold(padded);
 			});
@@ -1112,7 +1121,7 @@ export class Markdown implements Component {
 
 			for (let lineIdx = 0; lineIdx < rowLineCount; lineIdx++) {
 				const rowParts = rowCellLines.map((cellLines, colIdx) => {
-					const text = reorderLine(cellLines[lineIdx] || "");
+					const text = paintVisual(cellLines[lineIdx] || "", columnWidths[colIdx]);
 					return text + " ".repeat(Math.max(0, columnWidths[colIdx] - visibleWidth(text)));
 				});
 				lines.push(`│ ${rowParts.join(" │ ")} │`);
