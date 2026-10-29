@@ -1,0 +1,7 @@
+{
+ "name": "bidi-js",
+ "version": "1.1.0",
+ "description": "Unicode Bidirectional Algorithm (UAX #9), vendored for the RTL patch",
+ "main": "dist/bidi.js",
+ "license": "MIT"
+}

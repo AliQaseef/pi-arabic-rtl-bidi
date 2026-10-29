@@ -1,0 +1,90 @@
+{
+ "baseVersion": "1.4.0",
+ "vendored": {
+  "pkg": "bidi-js",
+  "files": [
+   "package.json",
+   "dist/bidi.js",
+   "LICENSE.txt"
+  ]
+ },
+ "files": [
+  {
+   "pkg": "pi-tui",
+   "target": "dist/bidi.js",
+   "source": "pi-tui/dist/bidi.js",
+   "pristineSha": null,
+   "patchedSha": "4c1d05598d23a449994c77d0a999089ca077ee8eae34a4bc5b892248f23c6088"
+  },
+  {
+   "pkg": "pi-tui",
+   "target": "dist/index.js",
+   "source": "pi-tui/dist/index.js",
+   "pristineSha": "6068ae4207de753d9ec00dbe14aee199e6160d1dea0db9c8a92f65d08ffc6e80",
+   "patchedSha": "4516ca1703e50cc91c208ad04140820a4b0880f565b6400149047146f66966a9"
+  },
+  {
+   "pkg": "pi-tui",
+   "target": "dist/components/editor.js",
+   "source": "pi-tui/dist/components/editor.js",
+   "pristineSha": "838ebf6af4d1b0161959a0914c59aa65b0537b099fb358402356a51894db8075",
+   "patchedSha": "5212ee47afab5d72ba178607567f47b5e5ae07afa007a09b651a54256c6ad41f"
+  },
+  {
+   "pkg": "pi-tui",
+   "target": "dist/components/markdown.js",
+   "source": "pi-tui/dist/components/markdown.js",
+   "pristineSha": "d28861821607aefa7d8399507595fbe2f23b602bfa7f215986f3f8774762fe71",
+   "patchedSha": "5fe52eb1ad039a05bdc6ba942462f2500db013e66d31a7abda8503052aeb92cd"
+  },
+  {
+   "pkg": "pi-tui",
+   "target": "dist/components/text.js",
+   "source": "pi-tui/dist/components/text.js",
+   "pristineSha": "89adac5c6e2be6afcdf99ca015943901bc676938fd0115326da5af78c930803c",
+   "patchedSha": "96754dcd3c68327b09732dd8fa60aa0e49ab2e6b3929f6488059d469e55d6ed0"
+  },
+  {
+   "pkg": "pi-tui",
+   "target": "dist/components/truncated-text.js",
+   "source": "pi-tui/dist/components/truncated-text.js",
+   "pristineSha": "32c182d7faf44306d4e6937a0324a1f88b1acabbbe3fa8f385ef99ed9d9e090d",
+   "patchedSha": "a3602744aa09b1ca854498c8faea9bb458a5426decd819202f59c7c544829af5"
+  },
+  {
+   "pkg": "pi-coding-agent",
+   "target": "dist/core/settings-defaults.js",
+   "source": "pi-coding-agent/dist/core/settings-defaults.js",
+   "pristineSha": "592e953bfdf86c5c644354cdac4dad6dfd9b89f7914a10cb877dcd11ef885d33",
+   "patchedSha": "e8d86c492787d8386ae5bda98acd480aac221126afe96331cbcaa6e1ca4a3610"
+  },
+  {
+   "pkg": "pi-coding-agent",
+   "target": "dist/core/settings-manager.js",
+   "source": "pi-coding-agent/dist/core/settings-manager.js",
+   "pristineSha": "f3eeaadbc97b8c36acf98b1dd5894265f7f719bab95218e66dbc8c25658d5b12",
+   "patchedSha": "56813f91c10e36a9a466520e6a48b51609bc0ca4897fbb939b963e03427e83d6"
+  },
+  {
+   "pkg": "pi-coding-agent",
+   "target": "dist/core/settings-schema.js",
+   "source": "pi-coding-agent/dist/core/settings-schema.js",
+   "pristineSha": "25c0710ef360bf8bab2b0041b3a14024cbd567d89c8d5658c823270c65b533c7",
+   "patchedSha": "66f0a6432f8ed37e6b55a4721956c366916fa992ba7fbda3a44380fe04a3335b"
+  },
+  {
+   "pkg": "pi-coding-agent",
+   "target": "dist/modes/interactive/components/settings-selector.js",
+   "source": "pi-coding-agent/dist/modes/interactive/components/settings-selector.js",
+   "pristineSha": "4d50aef1f9cc3579bcb1300f090036b590e5cc8fad0b32f63dc26ec282f11109",
+   "patchedSha": "02a4d8b1d277e540850a26502860c1312a960c73621de93310e2fefe6d3f0413"
+  },
+  {
+   "pkg": "pi-coding-agent",
+   "target": "dist/modes/interactive/interactive-mode.js",
+   "source": "pi-coding-agent/dist/modes/interactive/interactive-mode.js",
+   "pristineSha": "633000038a8a9c60111fc9b32481c4015285fe530685277068bc5ed74f77dafa",
+   "patchedSha": "72934f10e9a9825760d873651533bef696cd1b570b4a16ca918b076b0fbc36ab"
+  }
+ ]
+}

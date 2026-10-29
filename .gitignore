@@ -51,4 +51,8 @@ packages/agent/docs/extensions/pi-server-artifact/index.md
 .scratch/
 *.png
 !rtl-patch/screenshots/*.png
+pi-rtl-src/
 bun.lock
+!rtl-patch/installed/pi-tui/dist/
+!rtl-patch/installed/pi-coding-agent/dist/
+!rtl-patch/installed/bidi-js/dist/
