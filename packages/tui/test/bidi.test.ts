@@ -80,6 +80,21 @@ describe("reorderLine", () => {
 		assert.ok(!reorderLine("\x1b[31mمرحبا\x1b[0m tail").includes("\x1b[0m"));
 	});
 
+	it("closes a style with the code that clears only that attribute", () => {
+		// A full reset in the middle of the line would also wipe the background the
+		// renderer wraps the line in, leaving the padding black.
+		const line = "\x1b[38;5;250mمرحبا\x1b[39m tail";
+		const reordered = reorderLine(line);
+		assert.ok(!reordered.includes("\x1b[0m"), reordered);
+		assert.equal(reordered.replace(/\x1b\[[0-9;]*m/g, ""), "tail ابحرم", reordered);
+		assert.equal(visibleWidth(reordered), visibleWidth(line), reordered);
+	});
+
+	it("treats the empty parameter form ESC[m as a reset", () => {
+		const reordered = reorderLine("\x1b[1mمرحبا\x1b[m tail");
+		assert.equal(reordered.replace(/\x1b\[[0-9;]*m/g, ""), "tail ابحرم", reordered);
+	});
+
 	it("keeps hyperlinks attached to their text", () => {
 		const line = "مرحبا \x1b]8;;https://pi.dev\x07الرابط\x1b]8;;\x07";
 		const reordered = reorderLine(line);

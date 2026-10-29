@@ -137,7 +137,9 @@ const defaultState: SgrState = {
 
 function applySgr(state: SgrState, code: string): SgrState {
 	const next = { ...state };
+	// `ESC[m` is the same as `ESC[0m`: an empty parameter list means a full reset.
 	const tokens = code.slice(2, -1).split(";");
+	if (tokens.length === 1 && tokens[0] === "") tokens[0] = "0";
 
 	for (let i = 0; i < tokens.length; i++) {
 		const token = tokens[i];
