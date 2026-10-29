@@ -730,13 +730,13 @@ export class Markdown implements Component {
 				for (const quoteLine of renderedQuoteLines) {
 					const styledLine = applyQuoteStyle(quoteLine);
 					const wrappedLines = wrapTextWithAnsi(styledLine, quoteContentWidth);
-				for (const wrappedLine of wrappedLines) {
-					if (getBidiSettings().align && dominantDirection(wrappedLine) === "rtl") {
-						// In RTL the quote bar marks the reading edge, so it sits on the right.
-						lines.push(paintVisual(wrappedLine, quoteContentWidth) + this.theme.quoteBorder(" │"));
-					} else {
-						lines.push(this.theme.quoteBorder("│ ") + paintVisual(wrappedLine, quoteContentWidth));
-					}
+					for (const wrappedLine of wrappedLines) {
+						if (getBidiSettings().align && dominantDirection(wrappedLine) === "rtl") {
+							// In RTL the quote bar marks the reading edge, so it sits on the right.
+							lines.push(paintVisual(wrappedLine, quoteContentWidth) + this.theme.quoteBorder(" │"));
+						} else {
+							lines.push(this.theme.quoteBorder("│ ") + paintVisual(wrappedLine, quoteContentWidth));
+						}
 					}
 				}
 				if (nextTokenType && nextTokenType !== "space") {
@@ -933,11 +933,11 @@ export class Markdown implements Component {
 							// The marker marks the reading edge: in RTL it sits at the right and
 							// the item text hangs to its left. Continuation lines keep the same
 							// content edge, inset by the width of the marker.
-							const prefix = renderedAnyLine
-								? indent + " ".repeat(visibleWidth(marker))
-								: indent;
+							const prefix = renderedAnyLine ? indent + " ".repeat(visibleWidth(marker)) : indent;
 							const mirroredMarker = mirrorMarker(marker);
-							const suffix = renderedAnyLine ? " ".repeat(visibleWidth(marker)) : this.theme.listBullet(mirroredMarker);
+							const suffix = renderedAnyLine
+								? " ".repeat(visibleWidth(marker))
+								: this.theme.listBullet(mirroredMarker);
 							const region = Math.max(1, width - visibleWidth(prefix) - visibleWidth(suffix));
 							lines.push(prefix + paintVisual(wrappedLine, region) + suffix);
 						} else {

@@ -90,13 +90,9 @@ describe("Arabic in the markdown renderer", () => {
 
 	it("keeps the background fill to the right edge of a reordered line", () => {
 		configureBidi({ enabled: true, align: false });
-		const line = new Markdown(
-			"مرحبا بالعالم **bold**",
-			1,
-			0,
-			defaultMarkdownTheme,
-			{ bgColor: (text: string) => `\x1b[44m${text}\x1b[49m` },
-		).render(30)[0];
+		const line = new Markdown("مرحبا بالعالم **bold**", 1, 0, defaultMarkdownTheme, {
+			bgColor: (text: string) => `\x1b[44m${text}\x1b[49m`,
+		}).render(30)[0];
 
 		assert.ok(line.includes("ملاعلاب"), line);
 
@@ -142,12 +138,17 @@ describe("alignment follows the script that dominates the line", () => {
 
 	it("never changes the visible width of a wrapped paragraph", () => {
 		configureBidi({ enabled: true, align: true });
-		const lines = new Markdown("مرحبا بالعالم هذا اختبار للنص الطويل الذي ينعطف", 0, 0, defaultMarkdownTheme).render(30);
+		const lines = new Markdown("مرحبا بالعالم هذا اختبار للنص الطويل الذي ينعطف", 0, 0, defaultMarkdownTheme).render(
+			30,
+		);
 		for (const line of lines) {
 			assert.ok(visibleWidth(line) <= 30, line);
 		}
 		// Every line of the paragraph ends at the same column.
-		assert.ok(lines.every((line) => visibleWidth(line) === 30), lines.map((line) => visibleWidth(line)).join(","));
+		assert.ok(
+			lines.every((line) => visibleWidth(line) === 30),
+			lines.map((line) => visibleWidth(line)).join(","),
+		);
 		configureBidi({ enabled: true, align: false });
 	});
 
@@ -157,7 +158,10 @@ describe("alignment follows the script that dominates the line", () => {
 		assert.ok(stripAnsi(lines[0]).trimEnd().endsWith("-"), lines[0]);
 		assert.ok(!stripAnsi(lines[0]).startsWith("- "), lines[0]);
 		assert.ok(stripAnsi(lines[1]).trimEnd().endsWith("-"), lines[1]);
-		assert.ok(lines.every((line) => visibleWidth(line) === 20), lines.join("|"));
+		assert.ok(
+			lines.every((line) => visibleWidth(line) === 20),
+			lines.join("|"),
+		);
 
 		// An item whose text is mostly English keeps its marker on the left.
 		const english = new Markdown("- npm install the package now", 0, 0, defaultMarkdownTheme).render(40)[0];
@@ -175,7 +179,9 @@ describe("alignment follows the script that dominates the line", () => {
 
 	it("mirrors an RTL table's columns and hugs the grid to the right edge", () => {
 		configureBidi({ enabled: true, align: true });
-		const lines = new Markdown("| الأمر | البديل |\n|---|---|\n| grep -r | rg |", 0, 0, defaultMarkdownTheme).render(30);
+		const lines = new Markdown("| الأمر | البديل |\n|---|---|\n| grep -r | rg |", 0, 0, defaultMarkdownTheme).render(
+			30,
+		);
 		const grid = lines[0];
 		assert.ok(stripAnsi(grid).startsWith(" "), grid);
 		assert.ok(!stripAnsi(grid).startsWith("┌"), grid);

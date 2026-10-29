@@ -45,7 +45,10 @@ export class TruncatedText implements Component {
 		// pushed to the edge its dominant script reads from.
 		const truncated = truncateToWidth(singleLineText, availableWidth);
 		const visual = reorderLine(truncated);
-		const displayText = getBidiSettings().align && dominantDirection(truncated) === "rtl" ? alignRight(visual, availableWidth) : visual;
+		const displayText =
+			getBidiSettings().align && dominantDirection(truncated) === "rtl"
+				? alignRight(visual, availableWidth)
+				: visual;
 
 		// Add horizontal padding
 		const leftPadding = " ".repeat(this.paddingX);

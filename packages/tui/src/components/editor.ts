@@ -1,5 +1,12 @@
 import type { AutocompleteProvider, AutocompleteSuggestions } from "../autocomplete.ts";
-import { dominantDirection, getBidiSettings, hasStrongRtl, reorderLine, reorderLineWithCaret, stepCaretVisual } from "../bidi.ts";
+import {
+	dominantDirection,
+	getBidiSettings,
+	hasStrongRtl,
+	reorderLine,
+	reorderLineWithCaret,
+	stepCaretVisual,
+} from "../bidi.ts";
 import { getKeybindings } from "../keybindings.ts";
 import { decodePrintableKey, matchesKey } from "../keys.ts";
 import { KillRing } from "../kill-ring.ts";
@@ -585,7 +592,7 @@ export class Editor implements Component, Focusable {
 				: undefined;
 
 			let displayText = painted ? painted.line : layoutLine.text;
-			let caretPos = painted ? painted.caretOffset : layoutLine.cursorPos;
+			const caretPos = painted ? painted.caretOffset : layoutLine.cursorPos;
 			let lineVisibleWidth = visibleWidth(layoutLine.text);
 			let cursorInPadding = false;
 
@@ -630,7 +637,9 @@ export class Editor implements Component, Focusable {
 			const hugRight = getBidiSettings().align && dominantDirection(layoutLine.text) === "rtl";
 
 			// Render the line (no side borders, just horizontal lines above and below)
-			result.push(`${leftPadding}${hugRight ? padding : ""}${displayText}${hugRight ? "" : padding}${lineRightPadding}`);
+			result.push(
+				`${leftPadding}${hugRight ? padding : ""}${displayText}${hugRight ? "" : padding}${lineRightPadding}`,
+			);
 		}
 
 		// Render bottom border (with scroll indicator if more content below)

@@ -77,7 +77,9 @@ export class Text implements Component {
 		// pushed to the edge its dominant script reads from.
 		const wrappedLines = wrapTextWithAnsi(normalizedText, contentWidth).map((line) => {
 			const visual = reorderLine(line);
-			return getBidiSettings().align && dominantDirection(line) === "rtl" ? alignRight(visual, contentWidth) : visual;
+			return getBidiSettings().align && dominantDirection(line) === "rtl"
+				? alignRight(visual, contentWidth)
+				: visual;
 		});
 
 		// Add margins and background to each line
