@@ -335,10 +335,9 @@ function resolveLevels(cells: Cell[], logical: string, forced?: BaseDirection): 
 	}
 
 	// Leading and trailing whitespace stay where they are. UAX #9 L1.4 resets
-	// trailing whitespace to the paragraph level so it does not jump to the
-	// other end of the line; leading whitespace needs the same anchor because
-	// in a terminal the indent is layout produced by the renderer, not content
-	// the reader is reading.
+	// trailing whitespace to the paragraph level so it does not jump to the other
+	// end of the line; leading whitespace needs the same anchor because in a terminal
+	// the indent is layout produced by the renderer, not content the reader is reading.
 	const anchorLevel = paragraph.level % 2 === 1 ? 0 : paragraph.level;
 	let first = 0;
 	while (first < cells.length && /^\s+$/.test(cells[first].grapheme)) cells[first++].level = anchorLevel;
@@ -576,9 +575,31 @@ export function paintLine(line: string, width: number, forced?: BaseDirection): 
  */
 function insertCaretCell(cells: Cell[], boundary: number): Cell[] {
 	const withCaret = [...cells];
-	const level = cells[boundary]?.level ?? cells[boundary - 1]?.level ?? 0;
-	const start = cells[boundary]?.logicalStart ?? cells[boundary - 1]?.logicalEnd ?? 0;
-	withCaret.splice(boundary, 0, {
+	let level = cells[boundary]?.level ?? cells[boundary - 1]?.level ?? 0;
+	let insert = boundary;
+
+	// Whitespace pinned to a line edge is layout, not content: a caret next to it
+	// belongs to the run it touches, so it travels with that run instead of riding the
+	// padding to the far side of the line. Only edge whitespace is treated this way -
+	// a gap between two runs is a real boundary the caret can sit in.
+	if (level === 0) {
+		let left = boundary - 1;
+		while (left >= 0 && cells[left].level === 0 && /^\s+$/.test(cells[left].grapheme)) left--;
+		let right = boundary;
+		while (right < cells.length && cells[right].level === 0 && /^\s+$/.test(cells[right].grapheme)) right++;
+		const touchesStart = left < 0;
+		const touchesEnd = right >= cells.length;
+		if (touchesEnd && left >= 0 && cells[left].level > 0) {
+			level = cells[left].level;
+			insert = left + 1;
+		} else if (touchesStart && right < cells.length && cells[right].level > 0) {
+			level = cells[right].level;
+			insert = right;
+		}
+	}
+
+	const start = cells[insert]?.logicalStart ?? cells[insert - 1]?.logicalEnd ?? 0;
+	withCaret.splice(insert, 0, {
 		grapheme: "",
 		state: defaultState,
 		level,

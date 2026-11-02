@@ -1,8 +1,8 @@
 diff --git a/package-lock.json b/package-lock.json
-index 898afd386..a4773b146 100644
+index a0749b93b..74e6330c9 100644
 --- a/package-lock.json
 +++ b/package-lock.json
-@@ -3151,6 +3151,15 @@
+@@ -3233,6 +3233,15 @@
  				"tweetnacl": "^0.14.3"
  			}
  		},
@@ -18,7 +18,7 @@ index 898afd386..a4773b146 100644
  		"node_modules/bignumber.js": {
  			"version": "9.3.1",
  			"resolved": "https://registry.npmjs.org/bignumber.js/-/bignumber.js-9.3.1.tgz",
-@@ -5068,7 +5077,6 @@
+@@ -4800,7 +4809,6 @@
  			"version": "2.0.2",
  			"resolved": "https://registry.npmjs.org/require-from-string/-/require-from-string-2.0.2.tgz",
  			"integrity": "sha512-Xf0nWe6RseziFMu+Ap9biiUbmplq6S9/p+7w7YXP/JBHhrUDDUhwa+vANyubuqfZWTveU//DYVGsDG7RKL/vEw==",
@@ -26,8 +26,8 @@ index 898afd386..a4773b146 100644
  			"license": "MIT",
  			"engines": {
  				"node": ">=0.10.0"
-@@ -6435,6 +6443,7 @@
- 			"version": "1.4.0",
+@@ -6022,6 +6030,7 @@
+ 			"version": "1.5.0",
  			"license": "MIT",
  			"dependencies": {
 +				"bidi-js": "1.1.0",
@@ -35,7 +35,7 @@ index 898afd386..a4773b146 100644
  				"marked": "18.0.11",
  				"marked-cjk-friendly": "0.1.2"
 diff --git a/packages/coding-agent/docs/environment-variables.md b/packages/coding-agent/docs/environment-variables.md
-index 828d617dd..5b9239a50 100644
+index 14dd3e142..1ef785af5 100644
 --- a/packages/coding-agent/docs/environment-variables.md
 +++ b/packages/coding-agent/docs/environment-variables.md
 @@ -82,6 +82,7 @@ These variables are read by Pi itself:
@@ -44,10 +44,10 @@ index 828d617dd..5b9239a50 100644
  | `PI_OFFLINE` | Disable automatic network activity, including model catalog refreshes |
 +| `PI_RTL` | Set to `0` to turn off right-to-left reordering for display, regardless of settings |
  | `PI_SKIP_VERSION_CHECK` | Disable the `pi.dev` latest-version request |
+ | `PI_SELF_UPDATE_COMMAND` | Command `pi update` runs to update Pi itself, split on whitespace, with `{packageName}`, `{version}`, and `{installSpec}` placeholders. Takes precedence over the `selfUpdateCommand` setting. See [Custom update command](cli.md#custom-update-command) |
  | `PI_TELEMETRY` | Override install/update telemetry and provider attribution headers: `1`/`true`/`yes` or `0`/`false`/`no` |
- | `PI_CODEMODE_MAX_WORKERS` | Maximum codemode workers alive at once across all sessions in the process; default `2`. Each worker's script may use up to 256 MB. Raise it when one process runs several sessions, such as in-process subagents. Further scripts wait for a free worker. See [Codemode](codemode.md) |
 diff --git a/packages/coding-agent/docs/settings.md b/packages/coding-agent/docs/settings.md
-index 7e2898525..57dc6c829 100644
+index 3de528c44..2c90c3b08 100644
 --- a/packages/coding-agent/docs/settings.md
 +++ b/packages/coding-agent/docs/settings.md
 @@ -110,6 +110,8 @@ See [Compaction Reference](compaction.md) for trigger, summarization, and valida
@@ -60,18 +60,18 @@ index 7e2898525..57dc6c829 100644
  | `images.blockImages` | boolean | `false` | Prevent images from being sent to models. |
  | `markdown.codeBlockIndent` | string | `"  "` | Prefix used to indent rendered code blocks. |
 diff --git a/packages/coding-agent/install-lock/package-lock.json b/packages/coding-agent/install-lock/package-lock.json
-index 5d242776c..03829b1a3 100644
+index e37a4fb76..9624be051 100644
 --- a/packages/coding-agent/install-lock/package-lock.json
 +++ b/packages/coding-agent/install-lock/package-lock.json
-@@ -550,6 +550,7 @@
- 			"resolved": "https://registry.npmjs.org/@earendil-works/pi-tui/-/pi-tui-1.4.0.tgz",
+@@ -558,6 +558,7 @@
+ 			"resolved": "https://registry.npmjs.org/@earendil-works/pi-tui/-/pi-tui-1.5.0.tgz",
  			"license": "MIT",
  			"dependencies": {
 +				"bidi-js": "1.1.0",
  				"get-east-asian-width": "1.6.0",
  				"marked": "18.0.11",
  				"marked-cjk-friendly": "0.1.2"
-@@ -779,6 +780,15 @@
+@@ -793,6 +794,15 @@
  				}
  			]
  		},
@@ -87,7 +87,7 @@ index 5d242776c..03829b1a3 100644
  		"node_modules/bignumber.js": {
  			"version": "9.3.1",
  			"resolved": "https://registry.npmjs.org/bignumber.js/-/bignumber.js-9.3.1.tgz",
-@@ -1332,6 +1342,15 @@
+@@ -1347,6 +1357,15 @@
  			"integrity": "sha512-FCqGtGOrMgzUiIrMNMA2YnsOxCNwo31dzqXvclXUC6xeT35NJLKXQJsvbeCTjvoFAwZgEAPg8U6+KAPDGXn8Mg==",
  			"license": "MIT"
  		},
@@ -104,10 +104,10 @@ index 5d242776c..03829b1a3 100644
  			"version": "0.13.1",
  			"resolved": "https://registry.npmjs.org/retry/-/retry-0.13.1.tgz",
 diff --git a/packages/coding-agent/schemas/settings.schema.json b/packages/coding-agent/schemas/settings.schema.json
-index 4d6c23a6d..a34b0855c 100644
+index c331ae27a..f41911532 100644
 --- a/packages/coding-agent/schemas/settings.schema.json
 +++ b/packages/coding-agent/schemas/settings.schema.json
-@@ -449,6 +449,21 @@
+@@ -466,6 +466,21 @@
                "const": "auto"
              }
            ]
@@ -145,10 +145,10 @@ index 1f9028045..f233e3306 100644
  	images: {
  		autoResize: true,
 diff --git a/packages/coding-agent/src/core/settings-manager.ts b/packages/coding-agent/src/core/settings-manager.ts
-index ad8b82c9e..8b999b82e 100644
+index 99bbeade0..581c3320a 100644
 --- a/packages/coding-agent/src/core/settings-manager.ts
 +++ b/packages/coding-agent/src/core/settings-manager.ts
-@@ -1244,6 +1244,32 @@ export class SettingsManager {
+@@ -1257,6 +1257,32 @@ export class SettingsManager {
  		return this.settings.terminal?.showTerminalProgress ?? SETTINGS_DEFAULTS.terminal.showTerminalProgress;
  	}
  
@@ -182,7 +182,7 @@ index ad8b82c9e..8b999b82e 100644
  		if (!this.globalSettings.terminal) {
  			this.globalSettings.terminal = {};
 diff --git a/packages/coding-agent/src/core/settings-schema.ts b/packages/coding-agent/src/core/settings-schema.ts
-index b17bab563..53c752a76 100644
+index 1ef797338..83340d2e0 100644
 --- a/packages/coding-agent/src/core/settings-schema.ts
 +++ b/packages/coding-agent/src/core/settings-schema.ts
 @@ -101,6 +101,23 @@ const TerminalSettingsSchema = Type.Object({
@@ -270,7 +270,7 @@ index e0cca789f..d0eae0f97 100644
  						callbacks.onTuiModeChange(newValue as TuiMode);
  						break;
 diff --git a/packages/coding-agent/src/modes/interactive/interactive-mode.ts b/packages/coding-agent/src/modes/interactive/interactive-mode.ts
-index e24d150be..f1857eaf8 100644
+index 6c6fbcf37..ce1875d2a 100644
 --- a/packages/coding-agent/src/modes/interactive/interactive-mode.ts
 +++ b/packages/coding-agent/src/modes/interactive/interactive-mode.ts
 @@ -34,6 +34,7 @@ import {
@@ -281,7 +281,7 @@ index e24d150be..f1857eaf8 100644
  	fuzzyFilter,
  	getCapabilities,
  	hyperlink,
-@@ -610,6 +611,7 @@ export class InteractiveMode {
+@@ -618,6 +619,7 @@ export class InteractiveMode {
  	constructor(runtimeHost: AgentSessionRuntime, options: InteractiveModeOptions = {}) {
  		this.runtimeHost = runtimeHost;
  		setCapabilityOverrides(this.settingsManager.getTerminalCapabilityOverrides());
@@ -289,7 +289,7 @@ index e24d150be..f1857eaf8 100644
  		const tuiMode = options.tuiMode ?? this.settingsManager.getTuiMode();
  		this.options = { ...options, tuiMode };
  		this.autoTrustOnReloadCwd = options.autoTrustOnReloadCwd;
-@@ -4919,6 +4921,8 @@ export class InteractiveMode {
+@@ -5048,6 +5050,8 @@ export class InteractiveMode {
  					quietStartup: this.settingsManager.getQuietStartup(),
  					clearOnShrink: this.settingsManager.getClearOnShrink(),
  					showTerminalProgress: this.settingsManager.getShowTerminalProgress(),
@@ -298,7 +298,7 @@ index e24d150be..f1857eaf8 100644
  					tuiMode: this.ui.mode,
  					fullscreenExitOutput: this.settingsManager.getFullscreenExitOutput(),
  					fullscreenScrollbar: this.settingsManager.getFullscreenScrollbar(),
-@@ -5077,6 +5081,18 @@ export class InteractiveMode {
+@@ -5206,6 +5210,18 @@ export class InteractiveMode {
  					onShowTerminalProgressChange: (enabled) => {
  						this.settingsManager.setShowTerminalProgress(enabled);
  					},
@@ -374,10 +374,10 @@ index 000000000..533a865dc
 +	});
 +});
 diff --git a/packages/tui/README.md b/packages/tui/README.md
-index 1150ebcf5..f9aed7fe3 100644
+index 6ed8a26b3..e83f9a5c5 100644
 --- a/packages/tui/README.md
 +++ b/packages/tui/README.md
-@@ -14,6 +14,40 @@ Minimal terminal UI framework with differential rendering and synchronized outpu
+@@ -14,6 +14,53 @@ Minimal terminal UI framework with differential rendering and synchronized outpu
  - **Built-in Components**: Text, TruncatedText, Input, Editor, Markdown, Loader, SelectList, SettingsList, MouseRegion, Spacer, Image, Box, Container, VStack, HStack, ScrollView
  - **Inline Images**: Renders images in terminals that support Kitty or iTerm2 graphics protocols
  - **Autocomplete Support**: File paths and slash commands
@@ -390,6 +390,17 @@ index 1150ebcf5..f9aed7fe3 100644
 +editor, clipboard and search uses - therefore appears mirrored. `src/bidi.ts` fixes that at the
 +painting layer:
 +
++- `paintLine(line, width, forced?)` is the seam components call. It reorders the line and, with
++  `align` on, pads it to `width` against the edge the line reads from. A line with nothing to
++  reorder comes back byte for byte unchanged, so a component that calls it is RTL-correct without
++  knowing anything about bidi. `Text`, `TruncatedText`, `Markdown`, `Editor`, `Input`, `SelectList`,
++  `SettingsList`, `ScrollView` and the image fallback all go through it.
++- `paintedLine(line, forced?)` returns the painted line together with the caret map the editor needs
++  (`caretOffsetAtColumn`, `caretColumnAt`, `stepCaret`), so rendering, arrow keys and mouse hit-testing
++  read one map instead of repainting the same line three times.
++- Copying out of the alternate screen is the other direction: `unpaintLine(painted)` returns the
++  logical text a painted line came from, so a selection of an Arabic line pastes in reading order. The
++  alternate-screen search matches what the user typed as well as its painted spelling.
 +- `reorderLine(line)` converts one rendered line from logical order into visual order, using
 +  `bidi-js` for the embedding levels and reversing runs per UAX #9 L2. Graphemes are the unit, so
 +  a letter and its combining marks travel as one cell; brackets are mirrored; leading and trailing
@@ -413,13 +424,15 @@ index 1150ebcf5..f9aed7fe3 100644
 +  `enabled` is off, because an aligned line is only ever a reordered one.
 +
 +Tests: `test/bidi.test.ts` (engine, including a check against `bidi-js`'s own reordering),
-+`test/bidi-markdown.test.ts`, `test/bidi-text.test.ts`, `test/bidi-editor.test.ts` (caret and
-+arrow keys through the virtual terminal).
++`test/bidi-text.test.ts`, `test/bidi-markdown.test.ts`, `test/bidi-editor.test.ts` (caret and
++arrow keys through the virtual terminal), `test/bidi-components.test.ts` (Input, SelectList,
++SettingsList, ScrollView gutter, image fallback), `test/bidi-settings.test.ts` and
++`test/bidi-selection.test.ts` (copy and search in the alternate screen).
  
  ## Quick Start
  
 diff --git a/packages/tui/package.json b/packages/tui/package.json
-index 31dc4744a..aa4512c3a 100644
+index 74a49f0d3..26e352a9e 100644
 --- a/packages/tui/package.json
 +++ b/packages/tui/package.json
 @@ -52,6 +52,7 @@
@@ -460,10 +473,10 @@ index 2ed382132..b03cd8b47 100644
  
 diff --git a/packages/tui/src/bidi.ts b/packages/tui/src/bidi.ts
 new file mode 100644
-index 000000000..e66503eb9
+index 000000000..65244d758
 --- /dev/null
 +++ b/packages/tui/src/bidi.ts
-@@ -0,0 +1,647 @@
+@@ -0,0 +1,668 @@
 +import fs from "node:fs";
 +import { homedir } from "node:os";
 +import { join } from "node:path";
@@ -801,10 +814,9 @@ index 000000000..e66503eb9
 +	}
 +
 +	// Leading and trailing whitespace stay where they are. UAX #9 L1.4 resets
-+	// trailing whitespace to the paragraph level so it does not jump to the
-+	// other end of the line; leading whitespace needs the same anchor because
-+	// in a terminal the indent is layout produced by the renderer, not content
-+	// the reader is reading.
++	// trailing whitespace to the paragraph level so it does not jump to the other
++	// end of the line; leading whitespace needs the same anchor because in a terminal
++	// the indent is layout produced by the renderer, not content the reader is reading.
 +	const anchorLevel = paragraph.level % 2 === 1 ? 0 : paragraph.level;
 +	let first = 0;
 +	while (first < cells.length && /^\s+$/.test(cells[first].grapheme)) cells[first++].level = anchorLevel;
@@ -1042,9 +1054,31 @@ index 000000000..e66503eb9
 + */
 +function insertCaretCell(cells: Cell[], boundary: number): Cell[] {
 +	const withCaret = [...cells];
-+	const level = cells[boundary]?.level ?? cells[boundary - 1]?.level ?? 0;
-+	const start = cells[boundary]?.logicalStart ?? cells[boundary - 1]?.logicalEnd ?? 0;
-+	withCaret.splice(boundary, 0, {
++	let level = cells[boundary]?.level ?? cells[boundary - 1]?.level ?? 0;
++	let insert = boundary;
++
++	// Whitespace pinned to a line edge is layout, not content: a caret next to it
++	// belongs to the run it touches, so it travels with that run instead of riding the
++	// padding to the far side of the line. Only edge whitespace is treated this way -
++	// a gap between two runs is a real boundary the caret can sit in.
++	if (level === 0) {
++		let left = boundary - 1;
++		while (left >= 0 && cells[left].level === 0 && /^\s+$/.test(cells[left].grapheme)) left--;
++		let right = boundary;
++		while (right < cells.length && cells[right].level === 0 && /^\s+$/.test(cells[right].grapheme)) right++;
++		const touchesStart = left < 0;
++		const touchesEnd = right >= cells.length;
++		if (touchesEnd && left >= 0 && cells[left].level > 0) {
++			level = cells[left].level;
++			insert = left + 1;
++		} else if (touchesStart && right < cells.length && cells[right].level > 0) {
++			level = cells[right].level;
++			insert = right;
++		}
++	}
++
++	const start = cells[insert]?.logicalStart ?? cells[insert - 1]?.logicalEnd ?? 0;
++	withCaret.splice(insert, 0, {
 +		grapheme: "",
 +		state: defaultState,
 +		level,
@@ -1112,7 +1146,7 @@ index 000000000..e66503eb9
 +	return padding > 0 ? " ".repeat(padding) + line : line;
 +}
 diff --git a/packages/tui/src/components/editor.ts b/packages/tui/src/components/editor.ts
-index 5d453e3cd..d370fa41d 100644
+index 9fd3677e9..91d906f66 100644
 --- a/packages/tui/src/components/editor.ts
 +++ b/packages/tui/src/components/editor.ts
 @@ -1,4 +1,12 @@
@@ -1152,7 +1186,7 @@ index 5d453e3cd..d370fa41d 100644
  }
  
  export interface EditorTheme {
-@@ -442,13 +464,13 @@ export class Editor implements Component, Focusable {
+@@ -447,13 +469,13 @@ export class Editor implements Component, Focusable {
  	}
  
  	private isOnFirstVisualLine(): boolean {
@@ -1168,7 +1202,7 @@ index 5d453e3cd..d370fa41d 100644
  		const currentVisualLine = this.findCurrentVisualLine(visualLines);
  		return currentVisualLine === visualLines.length - 1;
  	}
-@@ -570,14 +592,21 @@ export class Editor implements Component, Focusable {
+@@ -575,14 +597,21 @@ export class Editor implements Component, Focusable {
  		const emitCursorMarker = this.focused;
  
  		for (const layoutLine of visibleLines) {
@@ -1194,7 +1228,7 @@ index 5d453e3cd..d370fa41d 100644
  
  				// Hardware cursor marker (zero-width, emitted before fake cursor for IME positioning)
  				const marker = emitCursorMarker ? CURSOR_MARKER : "";
-@@ -604,11 +633,20 @@ export class Editor implements Component, Focusable {
+@@ -609,11 +638,20 @@ export class Editor implements Component, Focusable {
  			}
  
  			// Calculate padding based on actual visible width
@@ -1217,7 +1251,7 @@ index 5d453e3cd..d370fa41d 100644
  		}
  
  		// Render bottom border (with scroll indicator if more content below)
-@@ -658,37 +696,51 @@ export class Editor implements Component, Focusable {
+@@ -663,37 +701,51 @@ export class Editor implements Component, Focusable {
  		if (event.type !== "click" || event.button !== "left") return undefined;
  		if (event.y <= 0 || event.y > this.renderedVisibleLineCount) return { handled: true, focus: true };
  
@@ -1294,7 +1328,7 @@ index 5d453e3cd..d370fa41d 100644
  		if (this.autocompleteState) this.updateAutocomplete();
  		return { handled: true, focus: true };
  	}
-@@ -1001,6 +1053,9 @@ export class Editor implements Component, Focusable {
+@@ -1011,6 +1063,9 @@ export class Editor implements Component, Focusable {
  		if (this.state.lines.length === 0 || (this.state.lines.length === 1 && this.state.lines[0] === "")) {
  			// Empty editor
  			layoutLines.push({
@@ -1304,7 +1338,7 @@ index 5d453e3cd..d370fa41d 100644
  				text: "",
  				hasCursor: true,
  				cursorPos: 0,
-@@ -1013,19 +1068,32 @@ export class Editor implements Component, Focusable {
+@@ -1023,19 +1078,32 @@ export class Editor implements Component, Focusable {
  			const line = this.state.lines[i] || "";
  			const isCurrentLine = i === this.state.cursorLine;
  			const lineVisibleWidth = visibleWidth(line);
@@ -1337,7 +1371,7 @@ index 5d453e3cd..d370fa41d 100644
  					});
  				}
  			} else {
-@@ -1064,16 +1132,27 @@ export class Editor implements Component, Focusable {
+@@ -1074,16 +1142,27 @@ export class Editor implements Component, Focusable {
  						}
  					}
  
@@ -1365,7 +1399,7 @@ index 5d453e3cd..d370fa41d 100644
  						});
  					}
  				}
-@@ -1825,39 +1904,15 @@ export class Editor implements Component, Focusable {
+@@ -1835,39 +1914,15 @@ export class Editor implements Component, Focusable {
  			}
  		}
  	}
@@ -1412,7 +1446,7 @@ index 5d453e3cd..d370fa41d 100644
  	}
  
  	/**
-@@ -1893,7 +1948,7 @@ export class Editor implements Component, Focusable {
+@@ -1903,7 +1958,7 @@ export class Editor implements Component, Focusable {
  
  	private moveCursor(deltaLine: number, deltaCol: number): void {
  		this.lastAction = null;
@@ -1421,7 +1455,7 @@ index 5d453e3cd..d370fa41d 100644
  		const currentVisualLine = this.findCurrentVisualLine(visualLines);
  
  		if (deltaLine !== 0) {
-@@ -1907,6 +1962,16 @@ export class Editor implements Component, Focusable {
+@@ -1917,6 +1972,16 @@ export class Editor implements Component, Focusable {
  		if (deltaCol !== 0) {
  			const currentLine = this.state.lines[this.state.cursorLine] || "";
  
@@ -1438,7 +1472,7 @@ index 5d453e3cd..d370fa41d 100644
  			if (deltaCol > 0) {
  				// Moving right - move by one grapheme (handles emojis, combining characters, etc.)
  				if (this.state.cursorCol < currentLine.length) {
-@@ -1963,7 +2028,7 @@ export class Editor implements Component, Focusable {
+@@ -1973,7 +2038,7 @@ export class Editor implements Component, Focusable {
  		const terminalRows = this.tui.terminal.rows;
  		const pageSize = Math.max(5, Math.floor(terminalRows * 0.3));
  
@@ -1505,20 +1539,24 @@ index 48aacbff6..d1d766c99 100644
  		// Hardware cursor marker (zero-width, emitted before fake cursor for IME positioning)
  		const marker = this.focused ? CURSOR_MARKER : "";
 diff --git a/packages/tui/src/components/markdown.ts b/packages/tui/src/components/markdown.ts
-index aa2166277..326e384f0 100644
+index a21f75181..23b183231 100644
 --- a/packages/tui/src/components/markdown.ts
 +++ b/packages/tui/src/components/markdown.ts
-@@ -1,12 +1,23 @@
- import { Marked, type Token, Tokenizer, type TokenizerExtension, type Tokens } from "marked";
+@@ -1,9 +1,10 @@
+ import { Marked, type Token, Tokenizer, type TokenizerExtension, type Tokens, type TokensList } from "marked";
  import markedCjkFriendly from "marked-cjk-friendly";
 +import { alignRight, bidiSettingsKey, getBidiSettings, hasStrongRtl, lineDirection, paintLine } from "../bidi.ts";
  import { renderLatex } from "../latex.ts";
  import { getCapabilities, hyperlink, isImageLine } from "../terminal-image.ts";
  import type { Component } from "../tui.ts";
--import { applyBackgroundToLine, flattenLines, visibleWidth, wrapTextWithAnsi } from "../utils.ts";
-+import { applyBackgroundToLine, flattenLines, getGraphemeSegmenter, visibleWidth, wrapTextWithAnsi } from "../utils.ts";
+-import { applyBackgroundToLine, cjkPunctuationRegex, flattenLines, visibleWidth, wrapTextWithAnsi } from "../utils.ts";
++import { applyBackgroundToLine, cjkPunctuationRegex, flattenLines, getGraphemeSegmenter, visibleWidth, wrapTextWithAnsi } from "../utils.ts";
  
  const STRICT_STRIKETHROUGH_REGEX = /^(~~)(?=[^\s~])((?:\\.|[^\\])*?(?:\\.|[^\s~\\]))\1(?=[^~]|$)/;
+ 
+@@ -34,6 +35,16 @@ class MarkdownTokenizer extends Tokenizer {
+ 	}
+ }
  
 +/**
 + * Paint a list marker the way an RTL reader sees it: the gap on the inner side,
@@ -1530,10 +1568,10 @@ index aa2166277..326e384f0 100644
 +	return ` ${graphemes.reverse().join("")}`;
 +}
 +
- class StrictStrikethroughTokenizer extends Tokenizer {
- 	override del(src: string): Tokens.Del | undefined {
- 		const match = STRICT_STRIKETHROUGH_REGEX.exec(src);
-@@ -268,6 +279,7 @@ export class Markdown implements Component {
+ interface LatexToken extends Tokens.Generic {
+ 	type: "latex" | "latexBlock";
+ 	text: string;
+@@ -289,6 +300,7 @@ export class Markdown implements Component {
  	private cachedText?: string;
  	private cachedWidth?: number;
  	private cachedLines?: string[];
@@ -1541,7 +1579,7 @@ index aa2166277..326e384f0 100644
  	// Parsed tokens depend only on the source, so they survive theme and width invalidation. Held weakly: a token tree is
  	// about ten times the size of its source, and every message of a long transcript keeps a Markdown component. The
  	// tokens survive a burst of re-renders, such as a theme preview, and are collected afterwards.
-@@ -301,8 +313,16 @@ export class Markdown implements Component {
+@@ -336,8 +348,16 @@ export class Markdown implements Component {
  	}
  
  	render(width: number): string[] {
@@ -1559,7 +1597,7 @@ index aa2166277..326e384f0 100644
  			return this.cachedLines;
  		}
  
-@@ -316,6 +336,7 @@ export class Markdown implements Component {
+@@ -352,6 +372,7 @@ export class Markdown implements Component {
  			// Update cache
  			this.cachedText = this.text;
  			this.cachedWidth = width;
@@ -1567,54 +1605,7 @@ index aa2166277..326e384f0 100644
  			this.cachedLines = result;
  			return result;
  		}
-@@ -333,25 +354,38 @@ export class Markdown implements Component {
- 		}
- 
- 		// Convert tokens to styled terminal output
--		const renderedLines: string[] = [];
-+		// Code, tables, blockquote borders and list markers are chrome: their content is
-+		// reordered where the content is produced, so the border or marker never moves.
-+		const renderedLines: Array<{ line: string; reorderable: boolean }> = [];
- 
- 		for (let i = 0; i < tokens.length; i++) {
- 			const token = tokens[i];
- 			const nextToken = tokens[i + 1];
-+			const reorderable =
-+				token.type !== "code" && token.type !== "table" && token.type !== "blockquote" && token.type !== "list";
- 			const tokenLines = this.renderToken(token, contentWidth, nextToken?.type);
- 			for (const tokenLine of tokenLines) {
--				renderedLines.push(tokenLine);
-+				renderedLines.push({ line: tokenLine, reorderable });
- 			}
- 		}
- 
--		// Wrap lines (NO padding, NO background yet)
-+		// Wrap lines (NO padding, NO background yet). Wrapping runs on logical text; each
-+		// visual line is then reordered separately.
- 		const wrappedLines: string[] = [];
--		for (const line of renderedLines) {
--			if (isImageLine(line)) {
--				wrappedLines.push(line);
-+		for (const entry of renderedLines) {
-+			if (isImageLine(entry.line)) {
-+				wrappedLines.push(entry.line);
- 			} else {
--				for (const wrappedLine of wrapTextWithAnsi(line, contentWidth)) {
--					wrappedLines.push(wrappedLine);
-+				// The direction belongs to the logical line, not to the slice the width
-+				// cut it into: every visual line of one paragraph has to be ordered and
-+				// aligned the same way, or a wrapped sentence reads two ways at once.
-+				const direction = entry.reorderable ? lineDirection(entry.line) : undefined;
-+				for (const wrappedLine of wrapTextWithAnsi(entry.line, contentWidth)) {
-+					if (!entry.reorderable || !hasStrongRtl(wrappedLine)) {
-+						wrappedLines.push(wrappedLine);
-+						continue;
-+					}
-+					wrappedLines.push(paintLine(wrappedLine, contentWidth, direction));
- 				}
- 			}
- 		}
-@@ -395,6 +429,7 @@ export class Markdown implements Component {
+@@ -405,6 +426,7 @@ export class Markdown implements Component {
  		// Update cache
  		this.cachedText = this.text;
  		this.cachedWidth = width;
@@ -1622,7 +1613,36 @@ index aa2166277..326e384f0 100644
  		this.cachedLines = result;
  
  		return result.length > 0 ? result : [""];
-@@ -624,8 +659,14 @@ export class Markdown implements Component {
+@@ -422,14 +444,27 @@ export class Markdown implements Component {
+ 		const leftMargin = " ".repeat(this.paddingX);
+ 		const rightMargin = " ".repeat(this.paddingX);
+ 		const bgFn = this.defaultTextStyle?.bgColor;
++		// Code, tables, blockquote borders and list markers are chrome: their content is
++		// reordered where the content is produced, so the border or marker never moves.
++		const reorderable =
++			token.type !== "code" && token.type !== "table" && token.type !== "blockquote" && token.type !== "list";
+ 		const lines: string[] = [];
+ 		for (const line of this.renderToken(token, contentWidth, nextTokenType)) {
+ 			if (isImageLine(line)) {
+ 				lines.push(line);
+ 				continue;
+ 			}
++			// Wrapping runs on logical text; each visual line is then reordered separately.
++			// The direction belongs to the logical line, not to the slice the width cut it
++			// into: every visual line of one paragraph has to be ordered and aligned the
++			// same way, or a wrapped sentence reads two ways at once.
++			const direction = reorderable ? lineDirection(line) : undefined;
+ 			for (const wrappedLine of wrapTextWithAnsi(line, contentWidth)) {
+-				const lineWithMargins = leftMargin + wrappedLine + rightMargin;
++				let visual = wrappedLine;
++				if (reorderable && hasStrongRtl(wrappedLine)) {
++					visual = paintLine(wrappedLine, contentWidth, direction);
++				}
++				const lineWithMargins = leftMargin + visual + rightMargin;
+ 				if (bgFn) {
+ 					lines.push(applyBackgroundToLine(lineWithMargins, width, bgFn));
+ 				} else {
+@@ -697,8 +732,14 @@ export class Markdown implements Component {
  				for (const quoteLine of renderedQuoteLines) {
  					const styledLine = applyQuoteStyle(quoteLine);
  					const wrappedLines = wrapTextWithAnsi(styledLine, quoteContentWidth);
@@ -1638,7 +1658,7 @@ index aa2166277..326e384f0 100644
  					}
  				}
  				if (nextTokenType && nextTokenType !== "space") {
-@@ -817,9 +858,23 @@ export class Markdown implements Component {
+@@ -890,9 +931,23 @@ export class Markdown implements Component {
  
  				const itemLines = this.renderToken(itemToken, itemWidth, undefined, styleContext);
  				for (const line of itemLines) {
@@ -1664,7 +1684,7 @@ index aa2166277..326e384f0 100644
  						renderedAnyLine = true;
  					}
  				}
-@@ -988,20 +1043,36 @@ export class Markdown implements Component {
+@@ -1061,20 +1116,36 @@ export class Markdown implements Component {
  			}
  		}
  
@@ -1706,7 +1726,7 @@ index aa2166277..326e384f0 100644
  				const padded = text + " ".repeat(Math.max(0, columnWidths[colIdx] - visibleWidth(text)));
  				return this.theme.bold(padded);
  			});
-@@ -1016,15 +1087,18 @@ export class Markdown implements Component {
+@@ -1089,15 +1160,18 @@ export class Markdown implements Component {
  		// Render rows with wrapping
  		for (let rowIndex = 0; rowIndex < token.rows.length; rowIndex++) {
  			const row = token.rows[rowIndex];
@@ -1730,7 +1750,7 @@ index aa2166277..326e384f0 100644
  					return text + " ".repeat(Math.max(0, columnWidths[colIdx] - visibleWidth(text)));
  				});
  				lines.push(`│ ${rowParts.join(" │ ")} │`);
-@@ -1039,6 +1113,12 @@ export class Markdown implements Component {
+@@ -1112,6 +1186,12 @@ export class Markdown implements Component {
  		const bottomBorderCells = columnWidths.map((w) => "─".repeat(w));
  		lines.push(`└─${bottomBorderCells.join("─┴─")}─┘`);
  
@@ -1765,15 +1785,15 @@ index b8f8a51ff..cdbf76b40 100644
  
  	[LAYOUT_NODE](): ScrollLayoutNode {
 diff --git a/packages/tui/src/components/select-list.ts b/packages/tui/src/components/select-list.ts
-index f4f4354dd..6a68ef401 100644
+index c196ab4ab..4e243f8d4 100644
 --- a/packages/tui/src/components/select-list.ts
 +++ b/packages/tui/src/components/select-list.ts
 @@ -1,3 +1,4 @@
 +import { paintLine } from "../bidi.ts";
- import { getKeybindings } from "../keybindings.ts";
+ import { getKeybindings, getSelectPageIndex } from "../keybindings.ts";
  import type { Component, TuiMouseEvent, TuiMouseEventResult } from "../tui.ts";
  import { truncateToWidth, visibleWidth } from "../utils.ts";
-@@ -77,7 +78,7 @@ export class SelectList implements Component {
+@@ -78,7 +79,7 @@ export class SelectList implements Component {
  
  		// If no items match filter, show message
  		if (this.filteredItems.length === 0) {
@@ -1782,7 +1802,7 @@ index f4f4354dd..6a68ef401 100644
  			return lines;
  		}
  
-@@ -93,14 +94,16 @@ export class SelectList implements Component {
+@@ -94,14 +95,16 @@ export class SelectList implements Component {
  
  			const isSelected = i === this.selectedIndex;
  			const descriptionSingleLine = item.description ? normalizeToSingleLine(item.description) : undefined;
@@ -1802,15 +1822,15 @@ index f4f4354dd..6a68ef401 100644
  
  		return lines;
 diff --git a/packages/tui/src/components/settings-list.ts b/packages/tui/src/components/settings-list.ts
-index b1b8366bf..20d5e13c8 100644
+index b5e4d1b8c..37bbf5319 100644
 --- a/packages/tui/src/components/settings-list.ts
 +++ b/packages/tui/src/components/settings-list.ts
 @@ -1,3 +1,4 @@
 +import { paintLine } from "../bidi.ts";
  import { fuzzyFilter } from "../fuzzy.ts";
- import { getKeybindings } from "../keybindings.ts";
+ import { getKeybindings, getSelectPageIndex } from "../keybindings.ts";
  import type { Component, TuiMouseEvent, TuiMouseEventResult } from "../tui.ts";
-@@ -120,7 +121,7 @@ export class SettingsList implements Component {
+@@ -121,7 +122,7 @@ export class SettingsList implements Component {
  
  		const displayItems = this.getDisplayItems();
  		if (displayItems.length === 0) {
@@ -1819,7 +1839,7 @@ index b1b8366bf..20d5e13c8 100644
  			this.addHintLine(lines, width);
  			return lines;
  		}
-@@ -140,16 +141,20 @@ export class SettingsList implements Component {
+@@ -141,16 +142,20 @@ export class SettingsList implements Component {
  			const prefix = isSelected ? this.theme.cursor : "  ";
  			const prefixWidth = visibleWidth(prefix);
  
@@ -1843,7 +1863,7 @@ index b1b8366bf..20d5e13c8 100644
  
  			lines.push(truncateToWidth(prefix + labelText + separator + valueText, width));
  		}
-@@ -166,7 +171,7 @@ export class SettingsList implements Component {
+@@ -167,7 +172,7 @@ export class SettingsList implements Component {
  			lines.push("");
  			const wrappedDesc = wrapTextWithAnsi(selectedItem.description, width - 4);
  			for (const line of wrappedDesc) {
@@ -1853,7 +1873,7 @@ index b1b8366bf..20d5e13c8 100644
  		}
  
 diff --git a/packages/tui/src/components/text.ts b/packages/tui/src/components/text.ts
-index 024748912..f3f38aea2 100644
+index c9aea3d13..cb88f4925 100644
 --- a/packages/tui/src/components/text.ts
 +++ b/packages/tui/src/components/text.ts
 @@ -1,3 +1,4 @@
@@ -1869,7 +1889,7 @@ index 024748912..f3f38aea2 100644
  
  	constructor(text: string = "", paddingX: number = 1, paddingY: number = 1, customBgFn?: (text: string) => string) {
  		this.text = text;
-@@ -48,8 +50,16 @@ export class Text implements Component {
+@@ -50,8 +52,16 @@ export class Text implements Component {
  	}
  
  	render(width: number): string[] {
@@ -1887,7 +1907,7 @@ index 024748912..f3f38aea2 100644
  			return this.cachedLines;
  		}
  
-@@ -58,6 +68,7 @@ export class Text implements Component {
+@@ -60,6 +70,7 @@ export class Text implements Component {
  			const result: string[] = [];
  			this.cachedText = this.text;
  			this.cachedWidth = width;
@@ -1895,7 +1915,7 @@ index 024748912..f3f38aea2 100644
  			this.cachedLines = result;
  			return result;
  		}
-@@ -69,8 +80,14 @@ export class Text implements Component {
+@@ -71,8 +82,14 @@ export class Text implements Component {
  		const paddingX = Math.min(this.paddingX, Math.max(0, Math.floor((width - 1) / 2)));
  		const contentWidth = Math.max(1, width - paddingX * 2);
  
@@ -1912,7 +1932,7 @@ index 024748912..f3f38aea2 100644
  
  		// Add margins and background to each line
  		const leftMargin = " ".repeat(paddingX);
-@@ -103,9 +120,9 @@ export class Text implements Component {
+@@ -105,9 +122,9 @@ export class Text implements Component {
  		const result = [...emptyLines, ...contentLines, ...emptyLines];
  		flattenLines(result);
  
@@ -1945,7 +1965,7 @@ index c26b88929..919e9ce6b 100644
  		// Add horizontal padding
  		const leftPadding = " ".repeat(this.paddingX);
 diff --git a/packages/tui/src/index.ts b/packages/tui/src/index.ts
-index eb962609f..d193d6014 100644
+index 8b4f9ea4a..a52f0f57c 100644
 --- a/packages/tui/src/index.ts
 +++ b/packages/tui/src/index.ts
 @@ -1,5 +1,12 @@
@@ -1993,7 +2013,7 @@ index eb962609f..d193d6014 100644
  export { CancellableLoader } from "./components/cancellable-loader.ts";
  export { Editor, type EditorOptions, type EditorTheme } from "./components/editor.ts";
 diff --git a/packages/tui/src/tui-alt-screen.ts b/packages/tui/src/tui-alt-screen.ts
-index 5e6d76864..e8797bbad 100644
+index 61d5b4825..a3dbb32fc 100644
 --- a/packages/tui/src/tui-alt-screen.ts
 +++ b/packages/tui/src/tui-alt-screen.ts
 @@ -4,6 +4,7 @@ import {
@@ -2004,7 +2024,7 @@ index 5e6d76864..e8797bbad 100644
  import { AltScreenFlashContainer } from "./components/alt-screen-flash.ts";
  import { ScrollView } from "./components/scroll-view.ts";
  import { getKeybindings } from "./keybindings.ts";
-@@ -1461,11 +1462,10 @@ export class TuiAltScreen extends TuiBase implements ViewportTUI {
+@@ -1464,11 +1465,10 @@ export class TuiAltScreen extends TuiBase implements ViewportTUI {
  		for (let row = selection.start.row; row <= selection.end.row; row++) {
  			const line = sourceLines[row] ?? "";
  			const columns = this.getSelectionColumns(line, row, selection);
@@ -2119,10 +2139,10 @@ index 000000000..44c4f0f66
 +});
 diff --git a/packages/tui/test/bidi-editor.test.ts b/packages/tui/test/bidi-editor.test.ts
 new file mode 100644
-index 000000000..2e0b34c4d
+index 000000000..4904667c4
 --- /dev/null
 +++ b/packages/tui/test/bidi-editor.test.ts
-@@ -0,0 +1,227 @@
+@@ -0,0 +1,244 @@
 +import assert from "node:assert";
 +import { describe, it } from "node:test";
 +import { caretOffsetAtVisualColumn, configureBidi } from "../src/bidi.ts";
@@ -2259,6 +2279,23 @@ index 000000000..2e0b34c4d
 +		// The caret sits at the logical end, which in RTL is the left edge of the line.
 +		assert.ok(painted.startsWith("ا"), painted);
 +		assert.ok(painted.indexOf("ا") < painted.indexOf("ب"), painted);
++	});
++
++	it("keeps the caret at the reading end when a space follows an RTL word", () => {
++		configureBidi({ enabled: true, align: true });
++		try {
++			const editor = new Editor(createTestTUI(40), defaultEditorTheme);
++			typeInto(editor, "مرحبا");
++			const before = caretColumn(editor, 40);
++			editor.handleInput(" ");
++			const after = caretColumn(editor, 40);
++			// The space joins the padding at the physical end of the line; the caret must
++			// not ride it to the far edge, it stays against the text it follows.
++			assert.ok(after < before, `caret jumped to column ${after} after a space`);
++			assert.equal(visibleWidth(editor.render(40)[1]!), 40, editor.render(40)[1]);
++		} finally {
++			configureBidi({ enabled: true, align: false });
++		}
 +	});
 +
 +	it("inserts at the caret position when typing in the middle of an RTL line", () => {
@@ -2758,10 +2795,10 @@ index 000000000..991147e7c
 +});
 diff --git a/packages/tui/test/bidi.test.ts b/packages/tui/test/bidi.test.ts
 new file mode 100644
-index 000000000..3c114fdf1
+index 000000000..80761407a
 --- /dev/null
 +++ b/packages/tui/test/bidi.test.ts
-@@ -0,0 +1,262 @@
+@@ -0,0 +1,275 @@
 +import assert from "node:assert";
 +import { describe, it } from "node:test";
 +import bidiModule, { type Bidi } from "bidi-js";
@@ -2972,6 +3009,19 @@ index 000000000..3c114fdf1
 +		}
 +	});
 +
++	it("puts a caret at a line edge against the text, not the pinned padding", () => {
++		// The trailing space is pinned at the physical end of the line, but the caret
++		// after the last Arabic grapheme belongs to the run: it stays at the reading end.
++		assert.equal(caretPaintsAt("مرحبا ", 6), 0);
++		assert.equal(caretPaintsAt("مرحبا ", 5), 0);
++		assert.equal(caretPaintsAt("مرحبا   ", 8), 0);
++		// The indent is layout too: a caret before it lands at the reading start, the right.
++		assert.equal(caretPaintsAt("  مرحبا", 0), 7);
++		// A gap between two runs is a real boundary the caret can sit in.
++		assert.equal(caretPaintsAt("hello مرحبا world", 5), 5);
++	});
++
++	// Every caret position the renderer can paint has to be reachable by a click
 +	// Every caret position the renderer can paint has to be reachable by a click
 +	// on the cell the caret occupies.
 +	it("maps every painted caret column back to a logical offset", () => {

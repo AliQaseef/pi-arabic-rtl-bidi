@@ -136,6 +136,23 @@ describe("RTL in the editor", () => {
 		assert.ok(painted.indexOf("ا") < painted.indexOf("ب"), painted);
 	});
 
+	it("keeps the caret at the reading end when a space follows an RTL word", () => {
+		configureBidi({ enabled: true, align: true });
+		try {
+			const editor = new Editor(createTestTUI(40), defaultEditorTheme);
+			typeInto(editor, "مرحبا");
+			const before = caretColumn(editor, 40);
+			editor.handleInput(" ");
+			const after = caretColumn(editor, 40);
+			// The space joins the padding at the physical end of the line; the caret must
+			// not ride it to the far edge, it stays against the text it follows.
+			assert.ok(after < before, `caret jumped to column ${after} after a space`);
+			assert.equal(visibleWidth(editor.render(40)[1]!), 40, editor.render(40)[1]);
+		} finally {
+			configureBidi({ enabled: true, align: false });
+		}
+	});
+
 	it("inserts at the caret position when typing in the middle of an RTL line", () => {
 		const editor = new Editor(createTestTUI(40), defaultEditorTheme);
 		typeInto(editor, "مرحبا");

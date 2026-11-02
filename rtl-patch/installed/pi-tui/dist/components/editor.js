@@ -1,4 +1,4 @@
-import { dominantDirection, getBidiSettings, hasStrongRtl, reorderLine, reorderLineWithCaret, stepCaretVisual, } from "../bidi.js";
+import { getBidiSettings, lineDirection, paintedLine, stepCaretVisual, } from "../bidi.js";
 import { getKeybindings } from "../keybindings.js";
 import { decodePrintableKey, matchesKey } from "../keys.js";
 import { KillRing } from "../kill-ring.js";
@@ -207,6 +207,10 @@ export class Editor {
     };
     /** Focusable interface - set by TUI when focus changes */
     focused = false;
+    /** The open autocomplete menu receives fullscreen viewport keys, such as PageUp/PageDown. */
+    get capturesViewportInput() {
+        return this.autocompleteState !== null;
+    }
     tui;
     theme;
     paddingX = 0;
@@ -323,12 +327,12 @@ export class Editor {
         return this.state.lines.length === 1 && this.state.lines[0] === "";
     }
     isOnFirstVisualLine() {
-        const visualLines = this.buildVisualLineMap(this.lastWidth);
+        const visualLines = this.wrappedLines();
         const currentVisualLine = this.findCurrentVisualLine(visualLines);
         return currentVisualLine === 0;
     }
     isOnLastVisualLine() {
-        const visualLines = this.buildVisualLineMap(this.lastWidth);
+        const visualLines = this.wrappedLines();
         const currentVisualLine = this.findCurrentVisualLine(visualLines);
         return currentVisualLine === visualLines.length - 1;
     }
@@ -433,15 +437,13 @@ export class Editor {
         // autocomplete (e.g. slash-command menu) is visible.
         const emitCursorMarker = this.focused;
         for (const layoutLine of visibleLines) {
-            // The editor keeps logical order in state.lines; painting reorders RTL lines
-            // and moves the caret to the boundary it precedes in visual order.
-            const painted = hasStrongRtl(layoutLine.text)
-                ? layoutLine.hasCursor && layoutLine.cursorPos !== undefined
-                    ? reorderLineWithCaret(layoutLine.text, layoutLine.cursorPos)
-                    : { line: reorderLine(layoutLine.text), caretOffset: undefined }
-                : undefined;
-            let displayText = painted ? painted.line : layoutLine.text;
-            const caretPos = painted ? painted.caretOffset : layoutLine.cursorPos;
+            // state.lines keeps logical order; the painted line puts RTL text in visual
+            // order and reports where the caret sits inside it.
+            const paint = layoutLine.paint;
+            let displayText = paint ? paint.text : layoutLine.text;
+            const caretPos = paint && layoutLine.cursorPos !== undefined
+                ? paint.caretIndexAt(layoutLine.cursorPos)
+                : layoutLine.cursorPos;
             let lineVisibleWidth = visibleWidth(layoutLine.text);
             let cursorInPadding = false;
             // Add cursor if this line has it
@@ -479,7 +481,7 @@ export class Editor {
             // caret marker travels with the text, so the hardware cursor still lands on
             // the grapheme the caret precedes.
             const padding = " ".repeat(paddingWidth);
-            const hugRight = getBidiSettings().align && dominantDirection(layoutLine.text) === "rtl";
+            const hugRight = getBidiSettings().align && layoutLine.direction === "rtl";
             // Render the line (no side borders, just horizontal lines above and below)
             result.push(`${leftPadding}${hugRight ? padding : ""}${displayText}${hugRight ? "" : padding}${lineRightPadding}`);
         }
@@ -525,43 +527,49 @@ export class Editor {
             return undefined;
         if (event.y <= 0 || event.y > this.renderedVisibleLineCount)
             return { handled: true, focus: true };
-        const visualLines = this.buildVisualLineMap(this.lastWidth);
+        const layoutLines = this.wrappedLines();
         const visualLineIndex = this.scrollOffset + event.y - 1;
-        const visualLine = visualLines[visualLineIndex];
-        if (!visualLine)
+        const layoutLine = layoutLines[visualLineIndex];
+        if (!layoutLine)
             return { handled: true, focus: true };
-        const logicalLine = this.state.lines[visualLine.logicalLine] ?? "";
-        const chunkEnd = visualLine.startCol + visualLine.length;
-        const chunk = logicalLine.slice(visualLine.startCol, chunkEnd);
         const maxPadding = Math.max(0, Math.floor((event.width - 1) / 2));
         const paddingX = Math.min(this.paddingX, maxPadding);
         // A right-aligned RTL line starts one padding-width further in, so the click
         // column has to be measured from the edge the text actually starts at.
         const contentWidth = Math.max(1, event.width - paddingX * 2);
-        const leadingPad = getBidiSettings().align && dominantDirection(logicalLine) === "rtl"
-            ? Math.max(0, contentWidth - visibleWidth(chunk))
+        const paint = layoutLine.paint;
+        const leadingPad = getBidiSettings().align && paint?.direction === "rtl"
+            ? Math.max(0, contentWidth - visibleWidth(layoutLine.text))
             : 0;
         const targetColumn = Math.max(0, event.x - paddingX - leadingPad);
-        let visibleColumn = 0;
-        let targetIndex = chunk.length;
-        let lastGraphemeIndex = 0;
-        for (const grapheme of this.segment(chunk, "grapheme")) {
-            const nextColumn = visibleColumn + visibleWidth(grapheme.segment);
-            lastGraphemeIndex = grapheme.index;
-            if (targetColumn < nextColumn) {
-                targetIndex = grapheme.index;
-                break;
-            }
-            visibleColumn = nextColumn;
+        // Painting reverses RTL runs, so the click column has to be walked back through
+        // the same reversal to reach the logical offset it points at. A line with no
+        // paint has nothing reversed and keeps the logical walk below.
+        const mapped = paint?.caretOffsetAtColumn(targetColumn);
+        let targetIndex;
+        if (mapped !== undefined) {
+            targetIndex = mapped;
         }
-        const isLastSegment = visualLineIndex === visualLines.length - 1 ||
-            visualLines[visualLineIndex + 1]?.logicalLine !== visualLine.logicalLine;
-        if (!isLastSegment && targetIndex === chunk.length && chunk.length > 0)
-            targetIndex = lastGraphemeIndex;
-        this.state.cursorLine = visualLine.logicalLine;
-        this.setCursorCol(visualLine.startCol + targetIndex);
-        this.lastAction = null;
-        this.exitHistoryBrowsing();
+        else {
+            targetIndex = layoutLine.length;
+            let visibleColumn = 0;
+            let lastGraphemeIndex = 0;
+            for (const grapheme of this.segment(layoutLine.text, "grapheme")) {
+                const nextColumn = visibleColumn + visibleWidth(grapheme.segment);
+                lastGraphemeIndex = grapheme.index;
+                if (targetColumn < nextColumn) {
+                    targetIndex = grapheme.index;
+                    break;
+                }
+                visibleColumn = nextColumn;
+            }
+            const isLastSegment = visualLineIndex === layoutLines.length - 1 ||
+                layoutLines[visualLineIndex + 1]?.logicalLine !== layoutLine.logicalLine;
+            if (!isLastSegment && targetIndex === layoutLine.length && layoutLine.length > 0)
+                targetIndex = lastGraphemeIndex;
+        }
+        this.state.cursorLine = layoutLine.logicalLine;
+        this.setCursorCol(layoutLine.startCol + targetIndex);
         if (this.autocompleteState)
             this.updateAutocomplete();
         return { handled: true, focus: true };
@@ -625,7 +633,10 @@ export class Editor {
                 this.cancelAutocomplete();
                 return;
             }
-            if (kb.matches(data, "tui.select.up") || kb.matches(data, "tui.select.down")) {
+            if (kb.matches(data, "tui.select.up") ||
+                kb.matches(data, "tui.select.down") ||
+                kb.matches(data, "tui.select.pageUp") ||
+                kb.matches(data, "tui.select.pageDown")) {
                 this.autocompleteList.handleInput(data);
                 return;
             }
@@ -837,6 +848,9 @@ export class Editor {
         if (this.state.lines.length === 0 || (this.state.lines.length === 1 && this.state.lines[0] === "")) {
             // Empty editor
             layoutLines.push({
+                logicalLine: 0,
+                startCol: 0,
+                length: 0,
                 text: "",
                 hasCursor: true,
                 cursorPos: 0,
@@ -848,19 +862,32 @@ export class Editor {
             const line = this.state.lines[i] || "";
             const isCurrentLine = i === this.state.cursorLine;
             const lineVisibleWidth = visibleWidth(line);
+            // Every visual line cut out of one logical line reads the same way.
+            const direction = lineDirection(line);
             if (lineVisibleWidth <= contentWidth) {
                 // Line fits in one layout line
+                const paint = paintedLine(line, direction);
                 if (isCurrentLine) {
                     layoutLines.push({
+                        logicalLine: i,
+                        startCol: 0,
+                        length: line.length,
                         text: line,
                         hasCursor: true,
                         cursorPos: this.state.cursorCol,
+                        direction,
+                        paint,
                     });
                 }
                 else {
                     layoutLines.push({
+                        logicalLine: i,
+                        startCol: 0,
+                        length: line.length,
                         text: line,
                         hasCursor: false,
+                        direction,
+                        paint,
                     });
                 }
             }
@@ -897,17 +924,28 @@ export class Editor {
                             }
                         }
                     }
+                    const paint = paintedLine(chunk.text, direction);
                     if (hasCursorInChunk) {
                         layoutLines.push({
+                            logicalLine: i,
+                            startCol: chunk.startIndex,
+                            length: chunk.endIndex - chunk.startIndex,
                             text: chunk.text,
                             hasCursor: true,
                             cursorPos: adjustedCursorPos,
+                            direction,
+                            paint,
                         });
                     }
                     else {
                         layoutLines.push({
+                            logicalLine: i,
+                            startCol: chunk.startIndex,
+                            length: chunk.endIndex - chunk.startIndex,
                             text: chunk.text,
                             hasCursor: false,
+                            direction,
+                            paint,
                         });
                     }
                 }
@@ -1542,37 +1580,14 @@ export class Editor {
         }
     }
     /**
-     * Build a mapping from visual lines to logical positions.
-     * Returns an array where each element represents a visual line with:
-     * - logicalLine: index into this.state.lines
-     * - startCol: starting column in the logical line
-     * - length: length of this visual line segment
+     * The wrapped lines the editor paints: logical line, slice bounds, and the line
+     * as it is painted.
+     *
+     * layoutText is the only place that wraps, so navigation and click hit-testing read
+     * the same slices the renderer drew instead of wrapping the buffer a second time.
      */
-    buildVisualLineMap(width) {
-        const visualLines = [];
-        for (let i = 0; i < this.state.lines.length; i++) {
-            const line = this.state.lines[i] || "";
-            const lineVisWidth = visibleWidth(line);
-            if (line.length === 0) {
-                // Empty line still takes one visual line
-                visualLines.push({ logicalLine: i, startCol: 0, length: 0 });
-            }
-            else if (lineVisWidth <= width) {
-                visualLines.push({ logicalLine: i, startCol: 0, length: line.length });
-            }
-            else {
-                // Line needs wrapping - use word-aware wrapping
-                const chunks = wordWrapLine(line, width, [...this.segment(line, "grapheme")]);
-                for (const chunk of chunks) {
-                    visualLines.push({
-                        logicalLine: i,
-                        startCol: chunk.startIndex,
-                        length: chunk.endIndex - chunk.startIndex,
-                    });
-                }
-            }
-        }
-        return visualLines;
+    wrappedLines() {
+        return this.layoutText(this.lastWidth);
     }
     /**
      * Find the visual line index that contains the given logical position.
@@ -1600,7 +1615,7 @@ export class Editor {
     }
     moveCursor(deltaLine, deltaCol) {
         this.lastAction = null;
-        const visualLines = this.buildVisualLineMap(this.lastWidth);
+        const visualLines = this.wrappedLines();
         const currentVisualLine = this.findCurrentVisualLine(visualLines);
         if (deltaLine !== 0) {
             const targetVisualLine = currentVisualLine + deltaLine;
@@ -1613,9 +1628,7 @@ export class Editor {
             // In RTL text "right" is a smaller logical index: the caret walks through
             // the painted line, not the stored string. Lines without RTL get undefined
             // here and keep the logical movement below, unchanged.
-            const visualCol = hasStrongRtl(currentLine)
-                ? stepCaretVisual(currentLine, this.state.cursorCol, deltaCol > 0 ? 1 : -1)
-                : undefined;
+            const visualCol = stepCaretVisual(currentLine, this.state.cursorCol, deltaCol > 0 ? 1 : -1);
             if (visualCol !== undefined) {
                 this.setCursorCol(visualCol);
                 if (this.autocompleteState)
@@ -1679,7 +1692,7 @@ export class Editor {
         this.lastAction = null;
         const terminalRows = this.tui.terminal.rows;
         const pageSize = Math.max(5, Math.floor(terminalRows * 0.3));
-        const visualLines = this.buildVisualLineMap(this.lastWidth);
+        const visualLines = this.wrappedLines();
         const currentVisualLine = this.findCurrentVisualLine(visualLines);
         const targetVisualLine = Math.max(0, Math.min(visualLines.length - 1, currentVisualLine + direction * pageSize));
         this.moveToVisualLine(visualLines, currentVisualLine, targetVisualLine);

@@ -208,6 +208,19 @@ describe("click-to-caret mapping", () => {
 		}
 	});
 
+	it("puts a caret at a line edge against the text, not the pinned padding", () => {
+		// The trailing space is pinned at the physical end of the line, but the caret
+		// after the last Arabic grapheme belongs to the run: it stays at the reading end.
+		assert.equal(caretPaintsAt("مرحبا ", 6), 0);
+		assert.equal(caretPaintsAt("مرحبا ", 5), 0);
+		assert.equal(caretPaintsAt("مرحبا   ", 8), 0);
+		// The indent is layout too: a caret before it lands at the reading start, the right.
+		assert.equal(caretPaintsAt("  مرحبا", 0), 7);
+		// A gap between two runs is a real boundary the caret can sit in.
+		assert.equal(caretPaintsAt("hello مرحبا world", 5), 5);
+	});
+
+	// Every caret position the renderer can paint has to be reachable by a click
 	// Every caret position the renderer can paint has to be reachable by a click
 	// on the cell the caret occupies.
 	it("maps every painted caret column back to a logical offset", () => {

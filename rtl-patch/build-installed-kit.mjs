@@ -24,6 +24,14 @@ const installedFlag = process.argv.indexOf("--installed-pristine");
 const installedPristine = installedFlag >= 0 ? process.argv[installedFlag + 1] : undefined;
 const out = path.join(scriptDir, "installed");
 
+// The release the kit is built for. Keep it in sync with the manifest the kit carries.
+let baseVersion = "1.4.0";
+try {
+	baseVersion = JSON.parse(fs.readFileSync(path.join(out, "manifest.json"), "utf8")).baseVersion ?? baseVersion;
+} catch {
+	/* no manifest yet - the default is kept */
+}
+
 // The compiled files the kit must carry are every source file the patch touches,
 // mapped to its build output - so the list is derived from the patch, not typed out.
 const patchText = fs.readFileSync(path.join(scriptDir, "pi-rtl-bidi.patch"), "utf8");
@@ -122,7 +130,7 @@ fs.writeFileSync(
 
 fs.writeFileSync(
 	path.join(out, "manifest.json"),
-	JSON.stringify({ baseVersion: "1.4.0", vendored: { pkg: "bidi-js", files: ["package.json", ...VENDOR] }, files }, null, 1) + "\n",
+	JSON.stringify({ baseVersion, vendored: { pkg: "bidi-js", files: ["package.json", ...VENDOR] }, files }, null, 1) + "\n",
 );
 
 // The manifest is only useful if the kit on disk really matches it.
@@ -143,4 +151,4 @@ if (withoutReference.length) {
 			"pass --installed-pristine <node_modules/@earendil-works> or build the upstream checkout to record stock hashes",
 	);
 }
-for (const f of files) console.log(`  ${f.pkg}/${f.target}  pristine=${f.pristineSha ? "matched v1.4.0" : "new file"}`);
+for (const f of files) console.log(`  ${f.pkg}/${f.target}  pristine=${f.pristineSha ? `matched v${baseVersion}` : "new file"}`);

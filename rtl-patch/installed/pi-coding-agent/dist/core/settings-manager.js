@@ -520,6 +520,17 @@ export class SettingsManager {
         this.markModified("lastChangelogVersion");
         this.save();
     }
+    getExtensionChangelogVersion(key) {
+        return this.settings.extensionChangelogVersions?.[key];
+    }
+    setExtensionChangelogVersion(key, version) {
+        this.globalSettings.extensionChangelogVersions = {
+            ...(this.globalSettings.extensionChangelogVersions ?? {}),
+            [key]: version,
+        };
+        this.markModified("extensionChangelogVersions", key);
+        this.save();
+    }
     getSessionDir() {
         const sessionDir = this.settings.sessionDir;
         return sessionDir ? normalizePath(sessionDir) : sessionDir;
@@ -985,25 +996,16 @@ export class SettingsManager {
         };
     }
     setRtlEnabled(enabled) {
-        if (!this.globalSettings.terminal) {
-            this.globalSettings.terminal = {};
-        }
-        if (!this.globalSettings.terminal.rtl) {
-            this.globalSettings.terminal.rtl = {};
-        }
-        this.globalSettings.terminal.rtl.enabled = enabled;
-        this.globalSettings.terminal.rtl.enabled = enabled;
-        this.markModified("terminal", "rtl");
-        this.save();
+        this.setRtlSetting({ enabled });
     }
     setRtlAlign(enabled) {
-        if (!this.globalSettings.terminal) {
-            this.globalSettings.terminal = {};
-        }
-        if (!this.globalSettings.terminal.rtl) {
-            this.globalSettings.terminal.rtl = {};
-        }
-        this.globalSettings.terminal.rtl.align = enabled;
+        this.setRtlSetting({ align: enabled });
+    }
+    /** Write one rtl key and save: both setters go through here. */
+    setRtlSetting(next) {
+        const terminal = this.globalSettings.terminal ?? {};
+        terminal.rtl = { ...terminal.rtl, ...next };
+        this.globalSettings.terminal = terminal;
         this.markModified("terminal", "rtl");
         this.save();
     }

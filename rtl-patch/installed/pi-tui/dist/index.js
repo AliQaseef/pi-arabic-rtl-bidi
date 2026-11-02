@@ -1,9 +1,14 @@
 // Core TUI interfaces and classes
+import { applyRtlSettingsFromDisk } from "./bidi.js";
+// The `pi` bin of the shipped package is a bundle that inlines the settings
+// manager, so nothing calls configureBidi there. Configure RTL from the files
+// the settings manager reads when this entry point is loaded.
+applyRtlSettingsFromDisk();
 export { Marked } from "marked";
 // Autocomplete support
 export { CombinedAutocompleteProvider, } from "./autocomplete.js";
 // Components
-export { alignRight, configureBidi, detectBaseDirection, dominantDirection, getBidiSettings, hasStrongRtl, reorderLine, reorderLineWithCaret, stepCaretVisual, } from "./bidi.js";
+export { alignRight, caretOffsetAtVisualColumn, configureBidi, detectBaseDirection, getBidiSettings, hasStrongRtl, lineDirection, paintLine, reorderLine, reorderLineWithCaret, stepCaretVisual, } from "./bidi.js";
 // Colors and styling
 export { backgroundAnsi, colorToHex, colorToOkhsl, colorToOklch, colorToRgb, foregroundAnsi, indexedColor, mixColors, okhslColor, oklchColor, parseColor, rgbColor, styleText, styleTextWithAnsi, } from "./colors.js";
 export { Box } from "./components/box.js";
@@ -25,7 +30,7 @@ export { VStack, } from "./components/v-stack.js";
 // Fuzzy matching
 export { fuzzyFilter, fuzzyMatch } from "./fuzzy.js";
 // Keybindings
-export { getKeybindings, KeybindingsManager, setKeybindings, TUI_KEYBINDINGS, } from "./keybindings.js";
+export { getKeybindings, getSelectPageIndex, KeybindingsManager, setKeybindings, TUI_KEYBINDINGS, } from "./keybindings.js";
 // Keyboard input handling
 export { decodeKittyPrintable, isKeyRelease, isKeyRepeat, isKittyProtocolActive, Key, matchesKey, parseKey, setKittyProtocolActive, } from "./keys.js";
 // LaTeX rendering
@@ -47,5 +52,5 @@ export { Container, CURSOR_MARKER, compositeTuiLine, isFocusable, isViewportTUI,
 export { TuiAltScreen } from "./tui-alt-screen.js";
 export { TuiMainScreen } from "./tui-main-screen.js";
 // Utilities
-export { getOsc8LinkAtColumn, sliceByColumn, stripTerminalSequences, truncateToWidth, visibleWidth, wrapTextWithAnsi, } from "./utils.js";
+export { getOsc8LinkAtColumn, replaceControlCharacters, sliceByColumn, stripTerminalSequences, truncateToWidth, visibleWidth, wrapTextWithAnsi, } from "./utils.js";
 //# sourceMappingURL=index.js.map

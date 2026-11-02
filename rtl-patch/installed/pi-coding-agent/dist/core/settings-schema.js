@@ -1,5 +1,5 @@
-import { ModelThinkingLevelSchema } from "@earendil-works/pi-ai/providers/model-schema";
 import { Type } from "typebox";
+import { ModelThinkingLevelSchema } from "./pi-ai-schemas.js";
 import { SETTINGS_DEFAULTS } from "./settings-defaults.js";
 function nonNegativeSafeInteger(options = {}) {
     return Type.Integer({ minimum: 0, maximum: Number.MAX_SAFE_INTEGER, ...options });
@@ -73,11 +73,11 @@ const TerminalSettingsSchema = Type.Object({
     trueColor: Type.Optional(Type.Union([Type.Boolean(), Type.Literal("auto")])),
     rtl: Type.Optional(Type.Object({
         enabled: Type.Optional(Type.Boolean({
-            description: "Reorder right-to-left text for display so Arabic, Hebrew and Persian render in visual order.",
+            description: "Reorder right-to-left text for display so Arabic and Persian render in visual order.",
             default: SETTINGS_DEFAULTS.terminal.rtl.enabled,
         })),
         align: Type.Optional(Type.Boolean({
-            description: "Put a line against the edge its dominant script reads from: Arabic, Hebrew and Persian lines go right, English stays left, and a mixed line follows whichever script has more strong characters.",
+            description: "Put a line against the edge its dominant script reads from: Arabic and Persian lines go right, English stays left, and a mixed line follows whichever script has more strong characters.",
             default: SETTINGS_DEFAULTS.terminal.rtl.align,
         })),
     })),
@@ -149,6 +149,9 @@ const SkillsInputSchema = Type.Union([
 export const SettingsSchema = Type.Object({
     $schema: Type.Optional(Type.String({ description: "JSON Schema reference." })),
     lastChangelogVersion: Type.Optional(Type.String()),
+    extensionChangelogVersions: Type.Optional(Type.Record(Type.String(), Type.String(), {
+        description: "Last seen changelog version per extension package.",
+    })),
     defaultProvider: Type.Optional(Type.String()),
     defaultModel: Type.Optional(Type.String()),
     defaultThinkingLevel: Type.Optional(ModelThinkingLevelSchema),
@@ -190,6 +193,10 @@ export const SettingsSchema = Type.Object({
     shellCommandPrefix: Type.Optional(Type.String({ description: "Prefix prepended to every bash command, for example to enable shell aliases." })),
     npmCommand: Type.Optional(Type.Array(Type.String(), {
         description: 'Command used for npm package lookup and installation, in argv form such as ["mise", "exec", "node@20", "--", "npm"].',
+    })),
+    selfUpdateCommand: Type.Optional(Type.Array(Type.String(), {
+        minItems: 1,
+        description: 'Command `pi update` runs to update Pi itself, in argv form such as ["mise", "use", "-g", "npm:{packageName}@{version}"]. Placeholders: {packageName}, {version}, {installSpec}. PI_SELF_UPDATE_COMMAND takes precedence. Global setting only.',
     })),
     collapseChangelog: Type.Optional(Type.Boolean({
         description: "Show the condensed changelog after update; use /changelog for the full changelog.",

@@ -1,7 +1,7 @@
 # Applying the bidi patch to pi
 
-`pi-rtl-bidi.patch` is the whole diff from upstream tag `v1.4.0` to this working tree:
-33 files, +2164 / -119. Two scripts apply it on Windows.
+`pi-rtl-bidi.patch` is the whole diff from upstream tag `v1.5.0` to this working tree:
+33 files, +2221 / -112. Two scripts apply it on Windows.
 
 ## The newest pi source
 
@@ -28,7 +28,7 @@ By hand:
 ```sh
 git clone https://github.com/earendil-works/pi pi-upstream
 cd pi-upstream
-git checkout v1.4.0
+git checkout v1.5.0
 git apply /path/to/pi-rtl-bidi.patch
 ```
 
@@ -65,7 +65,7 @@ entry is imported, so the setting is honoured without the settings manager.
 - `--revert` restores the originals.
 - `--release <dir>` points at a specific release folder.
 
-A release whose files do not match the v1.4.0 build is skipped with a `SKIP` line
+A release whose files do not match the v1.5.0 build is skipped with a `SKIP` line
 rather than guessed at; that means the installed pi is newer than the patch base and
 the patch needs rebuilding from the fork.
 
@@ -79,7 +79,7 @@ node --test test/bidi.test.ts test/bidi-text.test.ts test/bidi-markdown.test.ts 
   test/bidi-selection.test.ts
 ```
 
-Expected: 75 tests, all passing. Then `bun install` in `packages/coding-agent` and `bun x vitest run
+Expected: 77 tests, all passing. Then `bun install` in `packages/coding-agent` and `bun x vitest run
 test/rtl-settings.test.ts test/settings-selector.test.ts`.
 test/settings-selector.test.ts`.
 Screenshots in `screenshots/` are the rendered result in Windows Terminal.
@@ -113,15 +113,17 @@ build. `npm run check:runtime-deps` passes with it as a runtime dependency of
 After changing the source, regenerate the compiled files the installed patch uses:
 
 ```sh
-node rtl-patch/gen-patch.mjs                          # the patch
-npm --prefix packages/tui run build                   # packages/tui/dist
-npm --prefix packages/coding-agent run build:unbundled # packages/coding-agent/dist
-node rtl-patch/build-installed-kit.mjs [patchedDir] [pristineDir]
+node rtl-patch/gen-patch.mjs                                   # the patch
+bun install --ignore-scripts
+bun x tsc -p packages/tui/tsconfig.build.json                  # packages/tui/dist
+bun x tsc -p packages/coding-agent/tsconfig.build.json         # packages/coding-agent/dist
+node rtl-patch/build-installed-kit.mjs . .scratch/upstream-150 \
+  --installed-pristine "C:/Users/ali/.pi/agent/install/releases/1.5.0/node_modules/@earendil-works"
 ```
 
 The list of files the kit carries is read out of the patch itself: every `packages/*/src/*.ts` the
 patch touches is mapped to its build output, so a newly patched component needs no edit here. The
-builder defaults to this repository and to the pristine v1.4.0 tree at `.scratch/upstream-check`; pass
+builder defaults to this repository and to the pristine upstream tree it was rebased on; pass
 directories or set `PI_RTL_PATCHED_DIR` / `PI_RTL_PRISTINE_DIR` when they live elsewhere. It writes
 `rtl-patch/installed/manifest.json`, which holds the hash each installed file must have before it is
 replaced, and checks the kit it wrote against those hashes. A pristine tree that has not been built

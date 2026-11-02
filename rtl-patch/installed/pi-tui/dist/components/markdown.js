@@ -1,30 +1,20 @@
 import { Marked, Tokenizer } from "marked";
 import markedCjkFriendly from "marked-cjk-friendly";
-import { alignRight, dominantDirection, getBidiSettings, hasStrongRtl, reorderLine } from "../bidi.js";
+import { alignRight, bidiSettingsKey, getBidiSettings, hasStrongRtl, lineDirection, paintLine } from "../bidi.js";
 import { renderLatex } from "../latex.js";
 import { getCapabilities, hyperlink, isImageLine } from "../terminal-image.js";
-import { applyBackgroundToLine, flattenLines, getGraphemeSegmenter, visibleWidth, wrapTextWithAnsi } from "../utils.js";
+import { applyBackgroundToLine, cjkPunctuationRegex, flattenLines, getGraphemeSegmenter, visibleWidth, wrapTextWithAnsi } from "../utils.js";
 const STRICT_STRIKETHROUGH_REGEX = /^(~~)(?=[^\s~])((?:\\.|[^\\])*?(?:\\.|[^\s~\\]))\1(?=[^~]|$)/;
-/**
- * Paint one line in visual order and, when alignment is on, against the edge its
- * dominant script reads from. The width is the column the line lives in, so the
- * padding that fills it stays part of the line - a background wrapped around the
- * line still covers the whole row.
- */
-function paintVisual(text, width) {
-    const visual = reorderLine(text);
-    return getBidiSettings().align && dominantDirection(text) === "rtl" ? alignRight(visual, width) : visual;
-}
-/**
- * Paint a list marker the way an RTL reader sees it: the gap on the inner side,
- * the dash or the number against the reading edge. "1." becomes " .1", so the
- * digit is the last cell of the line and the dot sits to its left.
- */
-function mirrorMarker(marker) {
-    const graphemes = [...getGraphemeSegmenter().segment(marker.trimEnd())].map((segment) => segment.segment);
-    return " " + graphemes.reverse().join("");
-}
-class StrictStrikethroughTokenizer extends Tokenizer {
+class MarkdownTokenizer extends Tokenizer {
+    url(src) {
+        const token = super.url(src);
+        if (!token)
+            return undefined;
+        // Bare URLs stop at CJK punctuation; explicit links and angle autolinks
+        // use separate tokenizers and can still contain these characters.
+        const punctuationIndex = token.raw.search(cjkPunctuationRegex);
+        return punctuationIndex < 0 ? token : super.url(token.raw.slice(0, punctuationIndex));
+    }
     del(src) {
         const match = STRICT_STRIKETHROUGH_REGEX.exec(src);
         if (!match) {
@@ -38,6 +28,15 @@ class StrictStrikethroughTokenizer extends Tokenizer {
             tokens: this.lexer.inlineTokens(text),
         };
     }
+}
+/**
+ * Paint a list marker the way an RTL reader sees it: the gap on the inner side,
+ * the dash or the number against the reading edge. "1." becomes " .1", so the
+ * digit is the last cell of the line and the dot sits to its left.
+ */
+function mirrorMarker(marker) {
+    const graphemes = [...getGraphemeSegmenter().segment(marker.trimEnd())].map((segment) => segment.segment);
+    return ` ${graphemes.reverse().join("")}`;
 }
 function isEscaped(source, index) {
     let backslashes = 0;
@@ -181,7 +180,7 @@ function trimPartialClosingFences(tokens) {
 }
 const markdownParser = new Marked();
 markdownParser.setOptions({
-    tokenizer: new StrictStrikethroughTokenizer(),
+    tokenizer: new MarkdownTokenizer(),
 });
 markdownParser.use({
     tokenizer: { emStrong: markedCjkFriendly().tokenizer?.emStrong },
@@ -199,10 +198,18 @@ export class Markdown {
     cachedText;
     cachedWidth;
     cachedLines;
+    cachedBidiKey;
     // Parsed tokens depend only on the source, so they survive theme and width invalidation. Held weakly: a token tree is
     // about ten times the size of its source, and every message of a long transcript keeps a Markdown component. The
     // tokens survive a burst of re-renders, such as a theme preview, and are collected afterwards.
     cachedTokens;
+    // The last render's top-level blocks. While a message streams only its last block changes, so a render styles and
+    // wraps only that block. Each render keeps only the blocks it used, which drops a streamed block's earlier versions.
+    // Held weakly like the tokens: the blocks repeat the source in their keys and the code in their highlighting, and
+    // only a burst of renders, such as streaming or a resize, needs them.
+    blocks;
+    // Highlighted code of the block being rendered, only set while renderBlock runs.
+    blockHighlightedCode;
     constructor(text, paddingX, paddingY, theme, defaultTextStyle, options) {
         this.text = text;
         this.paddingX = paddingX;
@@ -213,16 +220,28 @@ export class Markdown {
     }
     setText(text) {
         this.text = text;
-        this.invalidate();
+        this.clearRenderCache();
     }
     invalidate() {
+        this.clearRenderCache();
+        // The theme may have changed, which changes every styled line and the default style's prefix.
+        this.blocks = undefined;
+        this.defaultStylePrefix = undefined;
+    }
+    clearRenderCache() {
         this.cachedText = undefined;
         this.cachedWidth = undefined;
         this.cachedLines = undefined;
     }
     render(width) {
+        // Painted lines depend on the bidi settings, so a change has to repaint even
+        // when the text and the width did not.
+        const bidiKey = bidiSettingsKey();
         // Check cache
-        if (this.cachedLines && this.cachedText === this.text && this.cachedWidth === width) {
+        if (this.cachedLines &&
+            this.cachedText === this.text &&
+            this.cachedWidth === width &&
+            this.cachedBidiKey === bidiKey) {
             return this.cachedLines;
         }
         // Calculate available width for content (subtract horizontal padding)
@@ -230,10 +249,12 @@ export class Markdown {
         const text = this.options.transform?.(this.text, contentWidth) ?? this.text;
         // Don't render anything if there's no actual text
         if (!text || text.trim() === "") {
+            this.blocks = undefined;
             const result = [];
             // Update cache
             this.cachedText = this.text;
             this.cachedWidth = width;
+            this.cachedBidiKey = bidiKey;
             this.cachedLines = result;
             return result;
         }
@@ -247,76 +268,86 @@ export class Markdown {
             trimPartialClosingFences(tokens);
             this.cachedTokens = new WeakRef({ source: normalizedText, tokens });
         }
-        // Convert tokens to styled terminal output
-        // Code, tables, blockquote borders and list markers are chrome: their content is
-        // reordered where the content is produced, so the border or marker never moves.
-        const renderedLines = [];
+        // A reference link resolves through a definition anywhere in the text, so blocks with the same source can render
+        // differently; such texts are rare in practice and render without reusing blocks.
+        const reuseBlocks = Object.keys(tokens.links).length === 0;
+        const previousBlocks = this.blocks?.deref();
+        const blocks = new Map();
+        this.blocks = new WeakRef(blocks);
+        const contentLines = [];
         for (let i = 0; i < tokens.length; i++) {
             const token = tokens[i];
-            const nextToken = tokens[i + 1];
-            const reorderable = token.type !== "code" && token.type !== "table" && token.type !== "blockquote" && token.type !== "list";
-            const tokenLines = this.renderToken(token, contentWidth, nextToken?.type);
-            for (const tokenLine of tokenLines) {
-                renderedLines.push({ line: tokenLine, reorderable });
+            const nextTokenType = tokens[i + 1]?.type;
+            const reused = reuseBlocks ? (blocks.get(token.raw) ?? previousBlocks?.get(token.raw)) : undefined;
+            const block = reused ?? { width: -1, nextTokenType, lines: [], highlightedCode: new Map() };
+            if (block.width !== width || block.nextTokenType !== nextTokenType) {
+                this.renderBlock(block, token, nextTokenType, width, contentWidth);
             }
-        }
-        // Wrap lines (NO padding, NO background yet). Wrapping runs on logical text; each
-        // visual line is then reordered separately.
-        const wrappedLines = [];
-        for (const entry of renderedLines) {
-            if (isImageLine(entry.line)) {
-                wrappedLines.push(entry.line);
-            }
-            else {
-                for (const wrappedLine of wrapTextWithAnsi(entry.line, contentWidth)) {
-                    if (!entry.reorderable || !hasStrongRtl(wrappedLine)) {
-                        wrappedLines.push(wrappedLine);
-                        continue;
-                    }
-                    const visual = reorderLine(wrappedLine);
-                    const aligned = getBidiSettings().align && dominantDirection(wrappedLine) === "rtl"
-                        ? alignRight(visual, contentWidth)
-                        : visual;
-                    wrappedLines.push(aligned);
-                }
-            }
-        }
-        // Add margins and background to each wrapped line
-        const leftMargin = " ".repeat(this.paddingX);
-        const rightMargin = " ".repeat(this.paddingX);
-        const bgFn = this.defaultTextStyle?.bgColor;
-        const contentLines = [];
-        for (const line of wrappedLines) {
-            if (isImageLine(line)) {
+            if (reuseBlocks)
+                blocks.set(token.raw, block);
+            for (const line of block.lines) {
                 contentLines.push(line);
-                continue;
-            }
-            const lineWithMargins = leftMargin + line + rightMargin;
-            if (bgFn) {
-                contentLines.push(applyBackgroundToLine(lineWithMargins, width, bgFn));
-            }
-            else {
-                // No background - just pad to width
-                const visibleLen = visibleWidth(lineWithMargins);
-                const paddingNeeded = Math.max(0, width - visibleLen);
-                contentLines.push(lineWithMargins + " ".repeat(paddingNeeded));
             }
         }
         // Add top/bottom padding (empty lines)
+        const bgFn = this.defaultTextStyle?.bgColor;
         const emptyLine = " ".repeat(width);
         const emptyLines = [];
         for (let i = 0; i < this.paddingY; i++) {
             const line = bgFn ? applyBackgroundToLine(emptyLine, width, bgFn) : emptyLine;
             emptyLines.push(line);
         }
+        flattenLines(emptyLines);
         // Combine top padding, content, and bottom padding
         const result = emptyLines.concat(contentLines, emptyLines);
-        flattenLines(result);
         // Update cache
         this.cachedText = this.text;
         this.cachedWidth = width;
+        this.cachedBidiKey = bidiKey;
         this.cachedLines = result;
         return result.length > 0 ? result : [""];
+    }
+    /** Render one top-level block to output lines: wrapped, with margins, and padded or backgrounded to the width. */
+    renderBlock(block, token, nextTokenType, width, contentWidth) {
+        this.blockHighlightedCode = block.highlightedCode;
+        const leftMargin = " ".repeat(this.paddingX);
+        const rightMargin = " ".repeat(this.paddingX);
+        const bgFn = this.defaultTextStyle?.bgColor;
+        // Code, tables, blockquote borders and list markers are chrome: their content is
+        // reordered where the content is produced, so the border or marker never moves.
+        const reorderable = token.type !== "code" && token.type !== "table" && token.type !== "blockquote" && token.type !== "list";
+        const lines = [];
+        for (const line of this.renderToken(token, contentWidth, nextTokenType)) {
+            if (isImageLine(line)) {
+                lines.push(line);
+                continue;
+            }
+            // Wrapping runs on logical text; each visual line is then reordered separately.
+            // The direction belongs to the logical line, not to the slice the width cut it
+            // into: every visual line of one paragraph has to be ordered and aligned the
+            // same way, or a wrapped sentence reads two ways at once.
+            const direction = reorderable ? lineDirection(line) : undefined;
+            for (const wrappedLine of wrapTextWithAnsi(line, contentWidth)) {
+                let visual = wrappedLine;
+                if (reorderable && hasStrongRtl(wrappedLine)) {
+                    visual = paintLine(wrappedLine, contentWidth, direction);
+                }
+                const lineWithMargins = leftMargin + visual + rightMargin;
+                if (bgFn) {
+                    lines.push(applyBackgroundToLine(lineWithMargins, width, bgFn));
+                }
+                else {
+                    // No background - just pad to width
+                    const paddingNeeded = Math.max(0, width - visibleWidth(lineWithMargins));
+                    lines.push(lineWithMargins + " ".repeat(paddingNeeded));
+                }
+            }
+        }
+        this.blockHighlightedCode = undefined;
+        flattenLines(lines);
+        block.lines = lines;
+        block.width = width;
+        block.nextTokenType = nextTokenType;
     }
     /**
      * Apply default text style to a string.
@@ -430,9 +461,13 @@ export class Markdown {
                 break;
             case "latexBlock": {
                 const latexToken = token;
-                const rendered = !latexToken.pending && this.options.renderLatex !== false
-                    ? (renderLatex(latexToken.text, { display: true }) ?? latexToken.raw.trim())
-                    : latexToken.raw.trim();
+                let rendered = !latexToken.pending && this.options.renderLatex !== false
+                    ? renderLatex(latexToken.text, { display: true })
+                    : undefined;
+                // A 2D layout cannot be wrapped row by row; fall back to the raw source when it does not fit.
+                if (rendered === undefined || rendered.split("\n").some((line) => visibleWidth(line) > width)) {
+                    rendered = latexToken.raw.trim();
+                }
                 for (const line of rendered.split("\n")) {
                     lines.push(this.applyDefaultStyle(line));
                 }
@@ -445,8 +480,13 @@ export class Markdown {
                 const indent = this.theme.codeBlockIndent ?? "  ";
                 lines.push(this.theme.codeBlockBorder(`\`\`\`${token.lang || ""}`));
                 if (this.theme.highlightCode) {
-                    const highlightedLines = this.theme.highlightCode(token.text, token.lang);
-                    for (const hlLine of highlightedLines) {
+                    const key = `${token.lang ?? ""}\0${token.text}`;
+                    let highlighted = this.blockHighlightedCode?.get(key);
+                    if (!highlighted) {
+                        highlighted = this.theme.highlightCode(token.text, token.lang);
+                        this.blockHighlightedCode?.set(key, highlighted);
+                    }
+                    for (const hlLine of highlighted) {
                         lines.push(`${indent}${hlLine}`);
                     }
                 }
@@ -485,8 +525,20 @@ export class Markdown {
                     const lineWithReappliedStyle = line.replace(/\x1b\[0m/g, `\x1b[0m${quoteStylePrefix}`);
                     return quoteStyle(lineWithReappliedStyle);
                 };
+                // With no room for another border ("│ " plus at least one content column), render the
+                // nested content without one. Otherwise each extra level re-wraps every child line at
+                // width 1 and the output grows exponentially with nesting depth.
+                if (width < 3) {
+                    const quoteTokens = token.tokens || [];
+                    for (let i = 0; i < quoteTokens.length; i++) {
+                        for (const line of this.renderToken(quoteTokens[i], width, quoteTokens[i + 1]?.type, styleContext)) {
+                            lines.push(line);
+                        }
+                    }
+                    break;
+                }
                 // Calculate available width for quote content (subtract border "│ " = 2 chars)
-                const quoteContentWidth = Math.max(1, width - 2);
+                const quoteContentWidth = width - 2;
                 // Blockquotes contain block-level tokens (paragraph, list, code, etc.), so render
                 // children with renderToken() instead of renderInlineTokens().
                 // Default message style should not apply inside blockquotes.
@@ -499,7 +551,9 @@ export class Markdown {
                 for (let i = 0; i < quoteTokens.length; i++) {
                     const quoteToken = quoteTokens[i];
                     const nextQuoteToken = quoteTokens[i + 1];
-                    renderedQuoteLines.push(...this.renderToken(quoteToken, quoteContentWidth, nextQuoteToken?.type, quoteInlineStyleContext));
+                    for (const line of this.renderToken(quoteToken, quoteContentWidth, nextQuoteToken?.type, quoteInlineStyleContext)) {
+                        renderedQuoteLines.push(line);
+                    }
                 }
                 // Avoid rendering an extra empty quote line before the outer blockquote spacing.
                 while (renderedQuoteLines.length > 0 && renderedQuoteLines[renderedQuoteLines.length - 1] === "") {
@@ -508,13 +562,14 @@ export class Markdown {
                 for (const quoteLine of renderedQuoteLines) {
                     const styledLine = applyQuoteStyle(quoteLine);
                     const wrappedLines = wrapTextWithAnsi(styledLine, quoteContentWidth);
+                    const direction = lineDirection(styledLine);
                     for (const wrappedLine of wrappedLines) {
-                        if (getBidiSettings().align && dominantDirection(wrappedLine) === "rtl") {
+                        if (getBidiSettings().align && direction === "rtl") {
                             // In RTL the quote bar marks the reading edge, so it sits on the right.
-                            lines.push(paintVisual(wrappedLine, quoteContentWidth) + this.theme.quoteBorder(" │"));
+                            lines.push(paintLine(wrappedLine, quoteContentWidth, direction) + this.theme.quoteBorder(" │"));
                         }
                         else {
-                            lines.push(this.theme.quoteBorder("│ ") + paintVisual(wrappedLine, quoteContentWidth));
+                            lines.push(this.theme.quoteBorder("│ ") + paintLine(wrappedLine, quoteContentWidth, direction));
                         }
                     }
                 }
@@ -683,8 +738,9 @@ export class Markdown {
                 }
                 const itemLines = this.renderToken(itemToken, itemWidth, undefined, styleContext);
                 for (const line of itemLines) {
+                    const direction = lineDirection(line);
                     for (const wrappedLine of wrapTextWithAnsi(line, itemWidth)) {
-                        if (getBidiSettings().align && dominantDirection(wrappedLine) === "rtl") {
+                        if (getBidiSettings().align && direction === "rtl") {
                             // The marker marks the reading edge: in RTL it sits at the right and
                             // the item text hangs to its left. Continuation lines keep the same
                             // content edge, inset by the width of the marker.
@@ -694,11 +750,11 @@ export class Markdown {
                                 ? " ".repeat(visibleWidth(marker))
                                 : this.theme.listBullet(mirroredMarker);
                             const region = Math.max(1, width - visibleWidth(prefix) - visibleWidth(suffix));
-                            lines.push(prefix + paintVisual(wrappedLine, region) + suffix);
+                            lines.push(prefix + paintLine(wrappedLine, region, direction) + suffix);
                         }
                         else {
                             const linePrefix = renderedAnyLine ? continuationPrefix : firstPrefix;
-                            lines.push(linePrefix + paintVisual(wrappedLine, itemWidth));
+                            lines.push(linePrefix + paintLine(wrappedLine, itemWidth, direction));
                         }
                         renderedAnyLine = true;
                     }
@@ -847,7 +903,7 @@ export class Markdown {
         const tableText = [token.header, ...token.rows]
             .map((cells) => cells.map((cell) => cell.text ?? "").join(" "))
             .join(" ");
-        const rtlTable = getBidiSettings().align && dominantDirection(tableText) === "rtl";
+        const rtlTable = getBidiSettings().align && lineDirection(tableText) === "rtl";
         if (rtlTable) {
             token = { ...token, header: [...token.header].reverse(), rows: token.rows.map((row) => [...row].reverse()) };
             columnWidths = [...columnWidths].reverse();
@@ -856,15 +912,18 @@ export class Markdown {
         const topBorderCells = columnWidths.map((w) => "─".repeat(w));
         lines.push(`┌─${topBorderCells.join("─┬─")}─┐`);
         // Render header with wrapping
-        const headerCellLines = token.header.map((cell, i) => {
+        const headerCells = token.header.map((cell, i) => {
             const text = this.renderInlineTokens(cell.tokens || [], styleContext);
-            return this.wrapCellText(text, columnWidths[i], styleContext?.stylePrefix);
+            return {
+                lines: this.wrapCellText(text, columnWidths[i], styleContext?.stylePrefix),
+                direction: lineDirection(text),
+            };
         });
-        const headerLineCount = Math.max(...headerCellLines.map((c) => c.length));
+        const headerLineCount = Math.max(...headerCells.map((c) => c.lines.length));
         for (let lineIdx = 0; lineIdx < headerLineCount; lineIdx++) {
-            const rowParts = headerCellLines.map((cellLines, colIdx) => {
+            const rowParts = headerCells.map((cell, colIdx) => {
                 // Cell content is painted in visual order; the grid and the padding stay put.
-                const text = paintVisual(cellLines[lineIdx] || "", columnWidths[colIdx]);
+                const text = paintLine(cell.lines[lineIdx] || "", columnWidths[colIdx], cell.direction);
                 const padded = text + " ".repeat(Math.max(0, columnWidths[colIdx] - visibleWidth(text)));
                 return this.theme.bold(padded);
             });
@@ -877,14 +936,17 @@ export class Markdown {
         // Render rows with wrapping
         for (let rowIndex = 0; rowIndex < token.rows.length; rowIndex++) {
             const row = token.rows[rowIndex];
-            const rowCellLines = row.map((cell, i) => {
+            const rowCells = row.map((cell, i) => {
                 const text = this.renderInlineTokens(cell.tokens || [], styleContext);
-                return this.wrapCellText(text, columnWidths[i], styleContext?.stylePrefix);
+                return {
+                    lines: this.wrapCellText(text, columnWidths[i], styleContext?.stylePrefix),
+                    direction: lineDirection(text),
+                };
             });
-            const rowLineCount = Math.max(...rowCellLines.map((c) => c.length));
+            const rowLineCount = Math.max(...rowCells.map((c) => c.lines.length));
             for (let lineIdx = 0; lineIdx < rowLineCount; lineIdx++) {
-                const rowParts = rowCellLines.map((cellLines, colIdx) => {
-                    const text = paintVisual(cellLines[lineIdx] || "", columnWidths[colIdx]);
+                const rowParts = rowCells.map((cell, colIdx) => {
+                    const text = paintLine(cell.lines[lineIdx] || "", columnWidths[colIdx], cell.direction);
                     return text + " ".repeat(Math.max(0, columnWidths[colIdx] - visibleWidth(text)));
                 });
                 lines.push(`│ ${rowParts.join(" │ ")} │`);

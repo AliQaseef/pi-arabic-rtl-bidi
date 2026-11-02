@@ -1,5 +1,5 @@
 {
- "baseVersion": "1.4.0",
+ "baseVersion": "1.5.0",
  "vendored": {
   "pkg": "bidi-js",
   "files": [
@@ -10,81 +10,156 @@
  },
  "files": [
   {
-   "pkg": "pi-tui",
-   "target": "dist/bidi.js",
-   "source": "pi-tui/dist/bidi.js",
-   "pristineSha": null,
-   "patchedSha": "4c1d05598d23a449994c77d0a999089ca077ee8eae34a4bc5b892248f23c6088"
-  },
-  {
-   "pkg": "pi-tui",
-   "target": "dist/index.js",
-   "source": "pi-tui/dist/index.js",
-   "pristineSha": "6068ae4207de753d9ec00dbe14aee199e6160d1dea0db9c8a92f65d08ffc6e80",
-   "patchedSha": "4516ca1703e50cc91c208ad04140820a4b0880f565b6400149047146f66966a9"
-  },
-  {
-   "pkg": "pi-tui",
-   "target": "dist/components/editor.js",
-   "source": "pi-tui/dist/components/editor.js",
-   "pristineSha": "838ebf6af4d1b0161959a0914c59aa65b0537b099fb358402356a51894db8075",
-   "patchedSha": "5212ee47afab5d72ba178607567f47b5e5ae07afa007a09b651a54256c6ad41f"
-  },
-  {
-   "pkg": "pi-tui",
-   "target": "dist/components/markdown.js",
-   "source": "pi-tui/dist/components/markdown.js",
-   "pristineSha": "d28861821607aefa7d8399507595fbe2f23b602bfa7f215986f3f8774762fe71",
-   "patchedSha": "5fe52eb1ad039a05bdc6ba942462f2500db013e66d31a7abda8503052aeb92cd"
-  },
-  {
-   "pkg": "pi-tui",
-   "target": "dist/components/text.js",
-   "source": "pi-tui/dist/components/text.js",
-   "pristineSha": "89adac5c6e2be6afcdf99ca015943901bc676938fd0115326da5af78c930803c",
-   "patchedSha": "96754dcd3c68327b09732dd8fa60aa0e49ab2e6b3929f6488059d469e55d6ed0"
-  },
-  {
-   "pkg": "pi-tui",
-   "target": "dist/components/truncated-text.js",
-   "source": "pi-tui/dist/components/truncated-text.js",
-   "pristineSha": "32c182d7faf44306d4e6937a0324a1f88b1acabbbe3fa8f385ef99ed9d9e090d",
-   "patchedSha": "a3602744aa09b1ca854498c8faea9bb458a5426decd819202f59c7c544829af5"
-  },
-  {
    "pkg": "pi-coding-agent",
    "target": "dist/core/settings-defaults.js",
    "source": "pi-coding-agent/dist/core/settings-defaults.js",
-   "pristineSha": "592e953bfdf86c5c644354cdac4dad6dfd9b89f7914a10cb877dcd11ef885d33",
-   "patchedSha": "e8d86c492787d8386ae5bda98acd480aac221126afe96331cbcaa6e1ca4a3610"
+   "pristineSha": "0782a023c535acf77a9763489fba3ac731a44f7c02ddb389b5122ee08d771e25",
+   "patchedSha": "0782a023c535acf77a9763489fba3ac731a44f7c02ddb389b5122ee08d771e25",
+   "added": false
   },
   {
    "pkg": "pi-coding-agent",
    "target": "dist/core/settings-manager.js",
    "source": "pi-coding-agent/dist/core/settings-manager.js",
-   "pristineSha": "f3eeaadbc97b8c36acf98b1dd5894265f7f719bab95218e66dbc8c25658d5b12",
-   "patchedSha": "56813f91c10e36a9a466520e6a48b51609bc0ca4897fbb939b963e03427e83d6"
+   "pristineSha": "1e2c0d2e3d8ef6819a2ba4b0129d9804d0ca469a518cc81fcda530cea908a4bc",
+   "patchedSha": "1e2c0d2e3d8ef6819a2ba4b0129d9804d0ca469a518cc81fcda530cea908a4bc",
+   "added": false
   },
   {
    "pkg": "pi-coding-agent",
    "target": "dist/core/settings-schema.js",
    "source": "pi-coding-agent/dist/core/settings-schema.js",
-   "pristineSha": "25c0710ef360bf8bab2b0041b3a14024cbd567d89c8d5658c823270c65b533c7",
-   "patchedSha": "66f0a6432f8ed37e6b55a4721956c366916fa992ba7fbda3a44380fe04a3335b"
+   "pristineSha": "7d9f8ddadd770e8e755c48e780eea9c5fe61332edf3a272c59913a7b8e09a1bd",
+   "patchedSha": "7d9f8ddadd770e8e755c48e780eea9c5fe61332edf3a272c59913a7b8e09a1bd",
+   "added": false
   },
   {
    "pkg": "pi-coding-agent",
    "target": "dist/modes/interactive/components/settings-selector.js",
    "source": "pi-coding-agent/dist/modes/interactive/components/settings-selector.js",
-   "pristineSha": "4d50aef1f9cc3579bcb1300f090036b590e5cc8fad0b32f63dc26ec282f11109",
-   "patchedSha": "02a4d8b1d277e540850a26502860c1312a960c73621de93310e2fefe6d3f0413"
+   "pristineSha": "cf073027ed79e2fb167517ca52609db50717d3159eb82da7634ffa68574c79b3",
+   "patchedSha": "cf073027ed79e2fb167517ca52609db50717d3159eb82da7634ffa68574c79b3",
+   "added": false
   },
   {
    "pkg": "pi-coding-agent",
    "target": "dist/modes/interactive/interactive-mode.js",
    "source": "pi-coding-agent/dist/modes/interactive/interactive-mode.js",
-   "pristineSha": "633000038a8a9c60111fc9b32481c4015285fe530685277068bc5ed74f77dafa",
-   "patchedSha": "72934f10e9a9825760d873651533bef696cd1b570b4a16ca918b076b0fbc36ab"
+   "pristineSha": "478960b98b18b0e6a8f99346ae442efd61f20fd7cbfe6cb54be794d951c65646",
+   "patchedSha": "478960b98b18b0e6a8f99346ae442efd61f20fd7cbfe6cb54be794d951c65646",
+   "added": false
+  },
+  {
+   "pkg": "pi-tui",
+   "target": "dist/alt-screen-search.js",
+   "source": "pi-tui/dist/alt-screen-search.js",
+   "pristineSha": "ddc678cbcbb8a136aff9ea23787d06c507f0c9d602cfea75ac55245b51a59b06",
+   "patchedSha": "ddc678cbcbb8a136aff9ea23787d06c507f0c9d602cfea75ac55245b51a59b06",
+   "added": false
+  },
+  {
+   "pkg": "pi-tui",
+   "target": "dist/bidi.js",
+   "source": "pi-tui/dist/bidi.js",
+   "pristineSha": "1a951cbbb4902e56434e7eac3eefb576e7b28f9132547bac18f92323e1aa0a4c",
+   "patchedSha": "36feed2332a89de49a70e1ec6a81a3441e0df845337fc127bc4fb860a06d0ebb",
+   "added": true
+  },
+  {
+   "pkg": "pi-tui",
+   "target": "dist/components/editor.js",
+   "source": "pi-tui/dist/components/editor.js",
+   "pristineSha": "a16bb48b4100739c689c3eff7a3dbf07d15031aadc6768636b042ccd98155070",
+   "patchedSha": "a16bb48b4100739c689c3eff7a3dbf07d15031aadc6768636b042ccd98155070",
+   "added": false
+  },
+  {
+   "pkg": "pi-tui",
+   "target": "dist/components/image.js",
+   "source": "pi-tui/dist/components/image.js",
+   "pristineSha": "dfd77206247240d3f493c126426f99a4a3de33f5c9d7fc328730cadfdc9662d9",
+   "patchedSha": "dfd77206247240d3f493c126426f99a4a3de33f5c9d7fc328730cadfdc9662d9",
+   "added": false
+  },
+  {
+   "pkg": "pi-tui",
+   "target": "dist/components/input.js",
+   "source": "pi-tui/dist/components/input.js",
+   "pristineSha": "7fb861f940c5cb713d6ff6b480f0ae0ba13df144582867f4ab727e38f6940e2c",
+   "patchedSha": "7fb861f940c5cb713d6ff6b480f0ae0ba13df144582867f4ab727e38f6940e2c",
+   "added": false
+  },
+  {
+   "pkg": "pi-tui",
+   "target": "dist/components/markdown.js",
+   "source": "pi-tui/dist/components/markdown.js",
+   "pristineSha": "32643ee1ed3a4379d81376c678fbb11fdb33747bb2f30e99af5b1a14684eb5f1",
+   "patchedSha": "32643ee1ed3a4379d81376c678fbb11fdb33747bb2f30e99af5b1a14684eb5f1",
+   "added": false
+  },
+  {
+   "pkg": "pi-tui",
+   "target": "dist/components/scroll-view.js",
+   "source": "pi-tui/dist/components/scroll-view.js",
+   "pristineSha": "f4b56cdc06283ab9f29af872d357ee5cfd49e0c6aef369d35274b6575b66e04a",
+   "patchedSha": "f4b56cdc06283ab9f29af872d357ee5cfd49e0c6aef369d35274b6575b66e04a",
+   "added": false
+  },
+  {
+   "pkg": "pi-tui",
+   "target": "dist/components/select-list.js",
+   "source": "pi-tui/dist/components/select-list.js",
+   "pristineSha": "c97eff5b54f84bc341b00f38e6786ddb517db13954ed361c3b3ebc5ac2c2c9cc",
+   "patchedSha": "c97eff5b54f84bc341b00f38e6786ddb517db13954ed361c3b3ebc5ac2c2c9cc",
+   "added": false
+  },
+  {
+   "pkg": "pi-tui",
+   "target": "dist/components/settings-list.js",
+   "source": "pi-tui/dist/components/settings-list.js",
+   "pristineSha": "ac676684360ea97491a12899327046908101d672a31cdea2ec8ca9e1e2ee04ee",
+   "patchedSha": "ac676684360ea97491a12899327046908101d672a31cdea2ec8ca9e1e2ee04ee",
+   "added": false
+  },
+  {
+   "pkg": "pi-tui",
+   "target": "dist/components/text.js",
+   "source": "pi-tui/dist/components/text.js",
+   "pristineSha": "73ff393c6cb7b376036cb4f1ef7fa318faa86845e07a5ce78d3e71b28747138d",
+   "patchedSha": "73ff393c6cb7b376036cb4f1ef7fa318faa86845e07a5ce78d3e71b28747138d",
+   "added": false
+  },
+  {
+   "pkg": "pi-tui",
+   "target": "dist/components/truncated-text.js",
+   "source": "pi-tui/dist/components/truncated-text.js",
+   "pristineSha": "9af273301b4e5d4c394c6914182e8011013962d55304821d64f4375338231a99",
+   "patchedSha": "9af273301b4e5d4c394c6914182e8011013962d55304821d64f4375338231a99",
+   "added": false
+  },
+  {
+   "pkg": "pi-tui",
+   "target": "dist/index.js",
+   "source": "pi-tui/dist/index.js",
+   "pristineSha": "a19972b2e94859a823381c79c88303740c76e1685b33f718c35a4b3e578c775b",
+   "patchedSha": "a19972b2e94859a823381c79c88303740c76e1685b33f718c35a4b3e578c775b",
+   "added": false
+  },
+  {
+   "pkg": "pi-tui",
+   "target": "dist/tui-alt-screen.js",
+   "source": "pi-tui/dist/tui-alt-screen.js",
+   "pristineSha": "e4cb0fa18eec25d482b014e2278deccebeaa05d4be6ddfbf6d2a91339f8e9ae4",
+   "patchedSha": "e4cb0fa18eec25d482b014e2278deccebeaa05d4be6ddfbf6d2a91339f8e9ae4",
+   "added": false
+  },
+  {
+   "pkg": "pi-coding-agent",
+   "target": "dist/bundle/cli-runtime.js",
+   "source": "pi-coding-agent/dist/bundle/cli-runtime.js",
+   "pristineSha": null,
+   "patchedSha": "a5ce9fd4ad086161edf80e53554f4846275c58b19d7cb706ae924dfe93910971",
+   "added": false
   }
  ]
 }

@@ -55,7 +55,7 @@ git reset --hard
 git apply --check "%PATCH%"
 if errorlevel 1 (
 	echo.
-	echo The patch does not fit %TAG%. Upstream changed after v1.4.0, so the patch
+	echo The patch does not fit %TAG%. Upstream moved past v1.5.0, so the patch
 	echo needs rebuilding from the fork. See README.md for the diff command.
 	goto :fail
 )
@@ -76,7 +76,7 @@ if errorlevel 1 (
 echo.
 echo Running the bidi tests...
 cd packages\tui
-node --test test/bidi.test.ts test/bidi-markdown.test.ts test/bidi-editor.test.ts test/bidi-text.test.ts test/bidi-settings.test.ts
+node --test test/bidi.test.ts test/bidi-text.test.ts test/bidi-markdown.test.ts test/bidi-editor.test.ts test/bidi-settings.test.ts test/bidi-components.test.ts test/bidi-selection.test.ts
 set TESTRESULT=%errorlevel%
 
 echo.
