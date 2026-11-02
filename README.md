@@ -1,91 +1,206 @@
-# Arabic (RTL) rendering for pi — the bidi patch
+<p align="center">
+  <a href="https://pi.dev">
+    <img alt="pi logo" src="https://pi.dev/logo-auto.svg" width="128">
+  </a>
+</p>
+<p align="center">
+  <a href="https://discord.com/invite/3cU7Bz4UPx"><img alt="Discord" src="https://img.shields.io/badge/discord-community-5865F2?style=flat-square&logo=discord&logoColor=white" /></a>
+  <a href="https://www.npmjs.com/package/@earendil-works/pi-coding-agent"><img alt="npm" src="https://img.shields.io/npm/v/@earendil-works/pi-coding-agent?style=flat-square" /></a>
+</p>
 
-A fork of [pi](https://github.com/earendil-works/pi) whose only change is bidirectional
-terminal rendering (`AliQaseef/pi-arabic-rtl-bidi`): an Arabic, Hebrew or Persian line is
-written to the terminal in the order the reader sees it, and the line sits against the
-edge its script reads from.
-Everything here is the diff from upstream tag **`v1.5.0`** to the `rtl-bidi` branch —
-33 files, +2258 / -113.
+> New issues and PRs from new contributors are auto-closed by default. Maintainers review auto-closed issues daily. See [CONTRIBUTING.md](CONTRIBUTING.md).
 
-**RTL is off by default.** A line with no RTL content is rendered byte for byte as
-upstream renders it.
+# Pi
 
-## Turn it on
+Pi is a minimal, extensible agent harness that you can make your own.
 
-In `~/.pi/agent/settings.json`:
+Adapt Pi to your workflows, not the other way around. Customize Pi with [extensions](packages/coding-agent/docs/extensions.md), [skills](packages/coding-agent/docs/skills.md), [prompt templates](packages/coding-agent/docs/prompt-templates.md), and [themes](packages/coding-agent/docs/themes.md). Bundle them as [Pi packages](packages/coding-agent/docs/packages.md) and share via npm or git.
 
-```json
-"terminal": { "rtl": { "enabled": true, "align": true } }
+Pi ships with powerful defaults but skips features like sub-agents and plan mode. Ask Pi to build what you want, or install a package that does it your way.
+
+Use Pi [interactively](packages/coding-agent/docs/usage.md), automate it in [print or JSON mode](packages/coding-agent/docs/cli.md), control it over [RPC](packages/coding-agent/docs/rpc.md), or build apps with the [Pi TypeScript SDK](packages/coding-agent/docs/sdk.md). See [OpenClaw](https://github.com/OpenClaw/OpenClaw) for a real-world integration.
+
+## Getting started
+
+Install the command-line interface:
+
+```bash
+curl -fsSL https://pi.dev/install.sh | sh
 ```
 
-- `enabled` reorders the line into visual order.
-- `align` puts the line against the edge its dominant script reads from (Arabic hugs the
-  right edge, English the left).
-- `PI_RTL=0` turns reordering off whatever the file says.
+On Windows:
 
-The settings list has **Bidirectional text** and **Align to the reading edge**.
-
-## Apply it
-
-Two Windows scripts, no source tree needed for the first:
-
-| Script | What it does |
-| --- | --- |
-| `rtl-patch/rtl-apply-installed.bat` | Copies the patched `dist/*.js` from `rtl-patch/installed/` into the newest pi release under `~/.pi/agent/install/releases/`, vendors `bidi-js` so nothing is downloaded, backs up every file it touches, and finishes by running the patched `pi-tui`. `--check` reports, `--revert` restores. |
-| `rtl-patch/rtl-apply-latest.bat` | Clones upstream, checks out the newest tag, applies `rtl-patch/pi-rtl-bidi.patch`, installs with `bun install --ignore-scripts`, runs the bidi tests. `--revert` returns the tree to plain upstream. |
-
-By hand:
-
-```sh
-git clone https://github.com/earendil-works/pi pi-upstream
-cd pi-upstream
-git checkout v1.5.0
-git apply /path/to/pi-rtl-bidi.patch
+```shell
+powershell -c "irm https://pi.dev/install.ps1 | iex"
 ```
 
-A release whose files do not match the `v1.5.0` build is skipped with a `SKIP` line
-rather than guessed at — that means upstream moved past the patch base and the patch
-needs rebuilding from this fork.
+The installer pins all dependencies and updates Pi with `pi update`. Alternatively, install directly with npm, which does not pin transitive dependencies:
 
-## Where the code is
-
-- `packages/tui/src/bidi.ts` — the engine: embedding levels from `bidi-js`, per-line
-  direction, grapheme-cell reordering that keeps styling, links and background with the
-  cell that moved, bracket mirroring, and the caret/selection mapping.
-- `packages/tui/src/components/*` — every component that writes a line to the terminal
-  goes through `paintLine`: markdown, editor, input, text, truncated text, select list,
-  settings list, scroll view, alt-screen search.
-- `packages/coding-agent/src/core/settings-*` and the settings selector — the two
-  settings and the UI that exposes them.
-- `packages/tui/test/bidi-*.test.ts` — 78 tests covering reordering, alignment, caret
-  placement, typing, mouse clicks, selection copy and settings.
-- `rtl-patch/` — the patch file, the installed-pi kit, the apply scripts, the issue and
-  PR text, and screenshots of the same session rendered in Windows Terminal.
-
-## Verify it
-
-```sh
-bun install --ignore-scripts
-cd packages/tui
-node --test test/bidi.test.ts test/bidi-text.test.ts test/bidi-markdown.test.ts \
-  test/bidi-editor.test.ts test/bidi-settings.test.ts test/bidi-components.test.ts \
-  test/bidi-selection.test.ts
+```bash
+npm install -g --ignore-scripts @earendil-works/pi-coding-agent
 ```
 
-Expected: 78 tests, all passing. Build the compiled files with
-`bun x tsc -p packages/tui/tsconfig.build.json` and
-`bun x tsc -p packages/coding-agent/tsconfig.build.json`; `node rtl-patch/gen-patch.mjs`
-regenerates the patch from this tree and `node rtl-patch/build-installed-kit.mjs`
-rebuilds the kit. Full details in `rtl-patch/README.md`.
+Pi requires Node.js 22.19 or newer. The macOS, Linux, and Windows installers can install it if needed. Pi does not require dependency lifecycle scripts for a normal npm installation.
 
-## Dependency
+Start Pi in the directory where you want it to work:
 
-`packages/tui` gains **`bidi-js` 1.1.0** — MIT, pure JavaScript, no native build. The
-installed-pi route carries its own copy under `rtl-patch/installed/bidi-js/`, so no
-network install is needed there.
+```bash
+cd /path/to/project
+pi
+```
 
-## Status
+For a built-in AI provider, run `/login` inside Pi to connect a subscription or API key. Then give Pi a task.
 
-Upstream issue [#11579](https://github.com/earendil-works/pi/issues/11579) and PR
-[#11580](https://github.com/earendil-works/pi/pull/11580). Upstream auto-closes PRs from
-new contributors; the PR is reopened once a maintainer replies `lgtm`.
+See the [documentation](https://pi.dev/docs/latest) for full setup and usage instructions, or [visit pi.dev](https://pi.dev) for demos.
+
+## Run with Nix
+
+```bash
+nix run github:earendil-works/pi/stable
+```
+
+`stable` points at the latest release. Install it with `nix profile add github:earendil-works/pi/stable` and update with `nix profile upgrade pi`. Use a release tag such as `github:earendil-works/pi/v1.0.0` to pin a version, or `github:earendil-works/pi` for unreleased changes on `main`. Nix builds Pi from source.
+
+Supports ARM64 and x86-64 on Linux and macOS. Use `nix build .` or `nix run .` to build or run your checkout.
+
+Nix builds are offline, so the bundled model data comes from a pi.dev model catalog revision pinned in `nix/model-catalog.json`. At runtime, Pi still overlays newer catalog data from pi.dev as usual. The Nix workflow replaces the pin on `main` when it no longer matches the checkout, for example after a provider is added or gains a new model type. To refresh it by hand:
+
+```bash
+npm run update:model-catalog-pin
+```
+
+## Packages
+
+This monorepo contains the Pi CLI and its supporting libraries.
+
+| Package | Description |
+|---------|-------------|
+| **[@earendil-works/chord](packages/chord)** | Typed host runtime for hot-reloadable plugins, contracts, replicated state, and RPC over JSON links |
+| **[@earendil-works/pi-telemetry](packages/telemetry)** | Vendor-neutral telemetry contracts, reference adapter, conformance tests, and typed schemas |
+| **[@earendil-works/pi-ai](packages/ai)** | Unified multi-provider LLM API (OpenAI, Anthropic, Google, etc.) |
+| **[@earendil-works/pi-durable](packages/durable)** | Durable conversation, task, and document runtime |
+| **[@earendil-works/pi-agent-core](packages/agent)** | Agent runtime with tool calling and state management |
+| **[@earendil-works/pi-coding-agent](packages/coding-agent)** | Interactive coding agent CLI |
+| **[@earendil-works/pi-tui](packages/tui)** | Terminal UI library with differential rendering |
+
+For Slack/chat automation and workflows see [earendil-works/pi-chat](https://github.com/earendil-works/pi-chat).
+
+## Permissions & Containerization
+
+Pi does not include a built-in permission system for restricting filesystem, process, network, or credential access. By default, it runs with the permissions of the user and process that launched it.
+
+If you need stronger boundaries, containerize or sandbox Pi. See [packages/coding-agent/docs/containerization.md](packages/coding-agent/docs/containerization.md) for three patterns:
+
+- **Gondolin extension**: keep `pi` and provider auth on the host while routing built-in tools and `!` commands into a local Linux micro-VM.
+- **Plain Docker**: run the whole `pi` process in a local container for simple isolation.
+- **OpenShell**: run the whole `pi` process in a policy-controlled sandbox.
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution guidelines and [AGENTS.md](AGENTS.md) for project-specific rules (for both humans and agents).  Longer term plans for Pi can also be found in [RFCs](https://rfc.earendil.com/keyword/pi/).
+
+## Development
+
+```bash
+npm install --ignore-scripts  # Install all dependencies without running lifecycle scripts
+npm run build         # Refresh model data, then build all packages
+npm run build:offline # Rebuild using existing model data without network access
+npm run check         # Lint, format, and type check
+./test.sh            # Run tests (skips LLM-dependent tests without API keys)
+./pi-test.sh         # Run pi from sources (can be run from any directory)
+```
+
+### Using local packages outside the monorepo
+
+Build every public package into one coherent local artifact set:
+
+```bash
+npm run pack:packages -- --out .artifacts/pi-packages
+```
+
+This refreshes model data before building `pi-ai`. To avoid network access when
+model data is already hydrated, pass `--offline-model-data`.
+
+Then configure an external project to consume one package and resolve all of
+its Pi dependencies from the same artifact set. npm is the default:
+
+```bash
+node scripts/use-local-packages.mjs \
+  --manifest .artifacts/pi-packages/manifest.json \
+  --consumer ../my-project \
+  --package @earendil-works/pi-durable \
+  --package @earendil-works/pi-agent-core
+cd ../my-project
+npm install --ignore-scripts
+```
+
+For a pnpm project, point `--consumer` at the workspace root:
+
+```bash
+node scripts/use-local-packages.mjs \
+  --manifest .artifacts/pi-packages/manifest.json \
+  --consumer ../my-project \
+  --package @earendil-works/pi-agent-core \
+  --package-manager pnpm
+cd ../my-project
+pnpm install --ignore-scripts
+```
+
+Repeat `--package` for each direct dependency. The command updates the
+consumer's `package.json` with content-addressed local `file:` references. It
+writes transitive overrides to `package.json` for npm or `pnpm-workspace.yaml`
+for pnpm. Keep the artifact directory available while installing or updating
+the consumer. Re-run both commands after changing Pi source.
+
+## Building standalone binaries from release source
+
+GitHub releases include a versioned source archive covered by the release's `SHA256SUMS` file. Extract it and run the same build script used for the official standalone binaries:
+
+```bash
+VERSION="<release-version>"
+tar -xzf "pi-${VERSION}-source.tar.gz"
+cd "pi-${VERSION}"
+./scripts/build-binaries.sh --offline-model-data --platform linux-x64 --out "$PWD/out"
+```
+
+The archive includes release model data and native prebuilds. `--offline-model-data` uses that model data without refreshing provider catalogs. The script installs dependencies and builds the executable with its runtime assets; pass `--skip-install` if dependencies are already provided.
+
+## Supply-chain hardening
+
+We treat npm dependency changes as reviewed code changes.
+
+- Direct external dependencies are pinned to exact versions. Internal workspace packages remain version-ranged.
+- `.npmrc` sets `save-exact=true` and `min-release-age=2` to avoid same-day dependency releases during npm resolution.
+- `package-lock.json` is the dependency ground truth. Pre-commit blocks accidental lockfile commits unless `PI_ALLOW_LOCKFILE_CHANGE=1` is set.
+- `npm run check` verifies pinned direct deps, native TypeScript import compatibility, and the generated coding-agent install lock.
+- The pi.dev installer installs from `packages/coding-agent/install-lock/`, generated from the root lockfile, to pin transitive deps. The npm package does not pin transitive deps.
+- Local release smoke tests and npm publication use the same tarball packer; npm publishes the validated tarballs rather than repacking workspace directories.
+- Local release installs, documented npm installs, and `pi update --self` use `--ignore-scripts` where supported.
+- CI installs with `npm ci --ignore-scripts`, and a scheduled GitHub workflow runs `npm audit --omit=dev` plus `npm audit signatures --omit=dev`.
+- Install lock generation has an explicit allowlist for dependency lifecycle scripts; new lifecycle-script deps fail checks until reviewed.
+
+## Share your OSS coding agent sessions
+
+If you use Pi or other coding agents for open source work, please share your sessions.
+
+Public OSS session data helps improve coding agents with real-world tasks, tool use, failures, and fixes instead of toy benchmarks.
+
+For the full explanation, see [this post on X](https://x.com/badlogicgames/status/2037811643774652911).
+
+To publish sessions, use [`badlogic/pi-share-hf`](https://github.com/badlogic/pi-share-hf). Read its README.md for setup instructions. All you need is a Hugging Face account, the Hugging Face CLI, and `pi-share-hf`.
+
+You can also watch [this video](https://x.com/badlogicgames/status/2041151967695634619), where I show how I publish my `pi-mono` sessions.
+
+I regularly publish my own `pi-mono` work sessions here:
+
+- [badlogicgames/pi-mono on Hugging Face](https://huggingface.co/datasets/badlogicgames/pi-mono)
+
+## License
+
+MIT
+
+<p align="center">
+  <a href="https://pi.dev">pi.dev</a> domain graciously donated by
+  <br /><br />
+  <a href="https://exe.dev"><img src="packages/coding-agent/docs/images/exy.png" alt="Exy mascot" width="48" /><br />exe.dev</a>
+</p>
