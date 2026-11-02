@@ -1,14 +1,25 @@
 # Arabic (RTL) rendering for pi — the bidi patch
 
 A fork of [pi](https://github.com/earendil-works/pi) whose only change is bidirectional
-terminal rendering (`AliQaseef/pi-arabic-rtl-bidi`): an Arabic, Hebrew or Persian line is
-written to the terminal in the order the reader sees it, and the line sits against the
-edge its script reads from.
-Everything here is the diff from upstream tag **`v1.5.0`** to the `rtl-bidi` branch —
-33 files, +2258 / -113.
+terminal rendering: an Arabic, Hebrew or Persian line is written to the terminal in the
+order the reader sees it, and the line sits against the edge its script reads from.
+Everything here is the diff from upstream tag **`v1.5.0`** to the `arabic-rtl-bidi`
+branch — 33 files, +2258 / -113.
 
 **RTL is off by default.** A line with no RTL content is rendered byte for byte as
 upstream renders it.
+
+## Proof
+
+Rendered in Windows Terminal at 80 columns. Left: plain upstream. Right: this fork.
+
+| Arabic answer, reordered | Mixed Latin + Arabic, aligned to the reading edge |
+| --- | --- |
+| ![pi answering in Arabic with RTL reordering](https://raw.githubusercontent.com/AliQaseef/pi-arabic-rtl-bidi/main/rtl-patch/screenshots/pi_reply.png) | ![Arabic and English on the same line, each hugging its own edge](https://raw.githubusercontent.com/AliQaseef/pi-arabic-rtl-bidi/main/rtl-patch/screenshots/smart-align.png) |
+| Numbered list: the marker mirrors, the digit lands at the reading end | List and settings rows keep their columns while the RTL cells reorder inside them |
+| ![numbered RTL list](https://raw.githubusercontent.com/AliQaseef/pi-arabic-rtl-bidi/main/rtl-patch/screenshots/number-demo2.png) | ![RTL rows inside a column layout](https://raw.githubusercontent.com/AliQaseef/pi-arabic-rtl-bidi/main/rtl-patch/screenshots/pi_list_2.png) |
+
+More in `rtl-patch/screenshots/`.
 
 ## Turn it on
 
@@ -60,7 +71,7 @@ needs rebuilding from this fork.
 - `packages/tui/test/bidi-*.test.ts` — 78 tests covering reordering, alignment, caret
   placement, typing, mouse clicks, selection copy and settings.
 - `rtl-patch/` — the patch file, the installed-pi kit, the apply scripts, the issue and
-  PR text, and screenshots of the same session rendered in Windows Terminal.
+  PR text, and the screenshots above.
 
 ## Verify it
 
@@ -88,4 +99,5 @@ network install is needed there.
 
 Upstream issue [#11579](https://github.com/earendil-works/pi/issues/11579) and PR
 [#11580](https://github.com/earendil-works/pi/pull/11580). Upstream auto-closes PRs from
-new contributors; the PR is reopened once a maintainer replies `lgtm`.
+new contributors; the PR is reopened from `arabic-rtl-bidi` once a maintainer replies
+`lgtm`.
