@@ -19,18 +19,6 @@ class MarkdownTokenizer extends Tokenizer {
 		return punctuationIndex < 0 ? token : super.url(token.raw.slice(0, punctuationIndex));
 	}
 
-
-/**
- * Paint a list marker the way an RTL reader sees it: the gap on the inner side,
- * the dash or the number against the reading edge. "1." becomes " .1", so the
- * digit is the last cell of the line and the dot sits to its left.
- */
-function mirrorMarker(marker: string): string {
-	const graphemes = [...getGraphemeSegmenter().segment(marker.trimEnd())].map((segment) => segment.segment);
-	return ` ${graphemes.reverse().join("")}`;
-}
-
-class StrictStrikethroughTokenizer extends Tokenizer {
 	override del(src: string): Tokens.Del | undefined {
 		const match = STRICT_STRIKETHROUGH_REGEX.exec(src);
 		if (!match) {
@@ -45,6 +33,16 @@ class StrictStrikethroughTokenizer extends Tokenizer {
 			tokens: this.lexer.inlineTokens(text),
 		};
 	}
+}
+
+/**
+ * Paint a list marker the way an RTL reader sees it: the gap on the inner side,
+ * the dash or the number against the reading edge. "1." becomes " .1", so the
+ * digit is the last cell of the line and the dot sits to its left.
+ */
+function mirrorMarker(marker: string): string {
+	const graphemes = [...getGraphemeSegmenter().segment(marker.trimEnd())].map((segment) => segment.segment);
+	return ` ${graphemes.reverse().join("")}`;
 }
 
 interface LatexToken extends Tokens.Generic {
