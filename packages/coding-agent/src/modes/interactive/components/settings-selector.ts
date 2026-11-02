@@ -892,8 +892,7 @@ export class SettingsSelectorComponent extends Container {
 		items.splice(rtlIndex + 1, 0, {
 			id: "rtl-align",
 			label: "Align to the reading edge",
-			description:
-				"Arabic, Hebrew and Persian lines, markers, quote bars and tables go to the right; English stays left",
+			description: "Arabic and Persian lines, markers, quote bars and tables go to the right; English stays left",
 			currentValue: config.rtlAlign ? "true" : "false",
 			values: ["true", "false"],
 		});

@@ -1,3 +1,4 @@
+import { paintLine } from "../bidi.ts";
 import { getKeybindings, getSelectPageIndex } from "../keybindings.ts";
 import type { Component, TuiMouseEvent, TuiMouseEventResult } from "../tui.ts";
 import { truncateToWidth, visibleWidth } from "../utils.ts";
@@ -78,7 +79,7 @@ export class SelectList implements Component {
 
 		// If no items match filter, show message
 		if (this.filteredItems.length === 0) {
-			lines.push(this.theme.noMatch("  No matching commands"));
+			lines.push(paintLine(this.theme.noMatch("  No matching commands"), width));
 			return lines;
 		}
 
@@ -94,14 +95,16 @@ export class SelectList implements Component {
 
 			const isSelected = i === this.selectedIndex;
 			const descriptionSingleLine = item.description ? normalizeToSingleLine(item.description) : undefined;
-			lines.push(this.renderItem(item, isSelected, width, descriptionSingleLine, primaryColumnWidth));
+			lines.push(
+				paintLine(this.renderItem(item, isSelected, width, descriptionSingleLine, primaryColumnWidth), width),
+			);
 		}
 
 		// Add scroll indicators if needed
 		if (startIndex > 0 || endIndex < this.filteredItems.length) {
 			const scrollText = `  (${this.selectedIndex + 1}/${this.filteredItems.length})`;
 			// Truncate if too long for terminal
-			lines.push(this.theme.scrollInfo(truncateToWidth(scrollText, width - 2, "")));
+			lines.push(paintLine(this.theme.scrollInfo(truncateToWidth(scrollText, width - 2, "")), width - 2));
 		}
 
 		return lines;

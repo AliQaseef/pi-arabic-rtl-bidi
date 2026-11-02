@@ -76,7 +76,7 @@ if errorlevel 1 (
 echo.
 echo Running the bidi tests...
 cd packages\tui
-node --test test/bidi.test.ts test/bidi-markdown.test.ts test/bidi-editor.test.ts test/bidi-text.test.ts
+node --test test/bidi.test.ts test/bidi-markdown.test.ts test/bidi-editor.test.ts test/bidi-text.test.ts test/bidi-settings.test.ts
 set TESTRESULT=%errorlevel%
 
 echo.

@@ -105,15 +105,14 @@ const TerminalSettingsSchema = Type.Object({
 		Type.Object({
 			enabled: Type.Optional(
 				Type.Boolean({
-					description:
-						"Reorder right-to-left text for display so Arabic, Hebrew and Persian render in visual order.",
+					description: "Reorder right-to-left text for display so Arabic and Persian render in visual order.",
 					default: SETTINGS_DEFAULTS.terminal.rtl.enabled,
 				}),
 			),
 			align: Type.Optional(
 				Type.Boolean({
 					description:
-						"Put a line against the edge its dominant script reads from: Arabic, Hebrew and Persian lines go right, English stays left, and a mixed line follows whichever script has more strong characters.",
+						"Put a line against the edge its dominant script reads from: Arabic and Persian lines go right, English stays left, and a mixed line follows whichever script has more strong characters.",
 					default: SETTINGS_DEFAULTS.terminal.rtl.align,
 				}),
 			),

@@ -38,7 +38,7 @@ export const SETTINGS_DEFAULTS = {
 		clearOnShrink: false,
 		showTerminalProgress: false,
 		rtl: {
-			enabled: true,
+			enabled: false,
 			align: true,
 		},
 	},

@@ -23,6 +23,17 @@ implement the Unicode Bidirectional Algorithm. A line stored in logical order - 
 editor, clipboard and search uses - therefore appears mirrored. `src/bidi.ts` fixes that at the
 painting layer:
 
+- `paintLine(line, width, forced?)` is the seam components call. It reorders the line and, with
+  `align` on, pads it to `width` against the edge the line reads from. A line with nothing to
+  reorder comes back byte for byte unchanged, so a component that calls it is RTL-correct without
+  knowing anything about bidi. `Text`, `TruncatedText`, `Markdown`, `Editor`, `Input`, `SelectList`,
+  `SettingsList`, `ScrollView` and the image fallback all go through it.
+- `paintedLine(line, forced?)` returns the painted line together with the caret map the editor needs
+  (`caretOffsetAtColumn`, `caretColumnAt`, `stepCaret`), so rendering, arrow keys and mouse hit-testing
+  read one map instead of repainting the same line three times.
+- Copying out of the alternate screen is the other direction: `unpaintLine(painted)` returns the
+  logical text a painted line came from, so a selection of an Arabic line pastes in reading order. The
+  alternate-screen search matches what the user typed as well as its painted spelling.
 - `reorderLine(line)` converts one rendered line from logical order into visual order, using
   `bidi-js` for the embedding levels and reversing runs per UAX #9 L2. Graphemes are the unit, so
   a letter and its combining marks travel as one cell; brackets are mirrored; leading and trailing
@@ -35,13 +46,21 @@ painting layer:
 - Lines without a strong RTL character return unchanged, byte for byte, so English rendering is
   identical to before. Styling and OSC 8 hyperlinks travel with their grapheme; positional escapes
   (cursor movement, the editor cursor marker) are never moved.
-- `configureBidi({ enabled, align })` controls it. `enabled` defaults to true; `align` (right-align
-  RTL lines) defaults to false because alignment touches padding, the scrollbar gutter and overlay
-  compositing.
+- `lineDirection(line)` decides how a line reads, and both halves of the layout use that one answer:
+  a line that opens in RTL is reordered and aligned RTL; a line that opens in Latin is RTL only when
+  RTL words outnumber Latin ones. UAX #9 alone would order `ask 3 questions (أي بريد يكتب في الـ
+  commit؟)` by its first letter, which puts the Arabic in the wrong order. Words count, not letters,
+  because a command or a path is one word while the sentence around it is many.
+- `configureBidi({ enabled, align })` controls it. The library default is `enabled: true,
+  align: false`; the CLI ships `terminal.rtl.enabled: false` and reads the settings files, so RTL
+  stays off until the user turns it on. `getBidiSettings()` reports `align` as off whenever
+  `enabled` is off, because an aligned line is only ever a reordered one.
 
 Tests: `test/bidi.test.ts` (engine, including a check against `bidi-js`'s own reordering),
-`test/bidi-markdown.test.ts`, `test/bidi-text.test.ts`, `test/bidi-editor.test.ts` (caret and
-arrow keys through the virtual terminal).
+`test/bidi-text.test.ts`, `test/bidi-markdown.test.ts`, `test/bidi-editor.test.ts` (caret and
+arrow keys through the virtual terminal), `test/bidi-components.test.ts` (Input, SelectList,
+SettingsList, ScrollView gutter, image fallback), `test/bidi-settings.test.ts` and
+`test/bidi-selection.test.ts` (copy and search in the alternate screen).
 
 ## Quick Start
 

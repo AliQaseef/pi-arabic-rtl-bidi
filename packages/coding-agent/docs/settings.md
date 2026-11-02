@@ -110,8 +110,8 @@ See [Compaction Reference](compaction.md) for trigger, summarization, and valida
 | `terminal.hyperlinks` | `boolean \| "auto"` | `"auto"` | Override OSC 8 hyperlink detection. |
 | `terminal.images` | `"kitty" \| "iterm2" \| "auto" \| false` | `"auto"` | Override inline-image protocol detection. |
 | `terminal.trueColor` | `boolean \| "auto"` | `"auto"` | Override true-color detection. |
-| `terminal.rtl.enabled` | boolean | `true` | Reorder right-to-left text for display so Arabic, Hebrew and Persian read in visual order. Copy, search, caret positions and wrapping stay logical. Set `false` to render lines exactly as they are written. |
-| `terminal.rtl.align` | boolean | `true` | Put a line against the edge its dominant script reads from: Arabic, Hebrew and Persian lines go to the right, English stays on the left, and a mixed line follows whichever script has more strong characters. List markers, blockquote bars and table columns follow the same edge. Set `false` to keep everything at the left edge. |
+| `terminal.rtl.enabled` | boolean | `false` | Reorder right-to-left text for display so Arabic and Persian read in visual order. Copy, search, caret positions and wrapping stay logical. Off by default; set `true` to render RTL lines in visual order. |
+| `terminal.rtl.align` | boolean | `true` | Put a line against the edge it reads from: Arabic and Persian lines go to the right, English stays on the left. A line that opens in Arabic reads from the right; a line that opens in Latin reads from the right only when Arabic words outnumber Latin ones, so a tool name or a code span at the start of a line does not decide its direction. List markers, blockquote bars and table columns follow the same edge. Set `false` to keep everything at the left edge. |
 | `images.autoResize` | boolean | `true` | Resize images to at most 2000 by 2000 pixels before sending them to a model. |
 | `images.blockImages` | boolean | `false` | Prevent images from being sent to models. |
 | `markdown.codeBlockIndent` | string | `"  "` | Prefix used to indent rendered code blocks. |

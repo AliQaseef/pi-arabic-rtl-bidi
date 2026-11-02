@@ -61,7 +61,7 @@ describe("Arabic in the markdown renderer", () => {
 		assert.equal(visibleWidth(header.replace(/\x1b\[[0-9;]*m/g, "")), visibleWidth(lines[2]), header);
 	});
 
-	it("reorders Hebrew and Persian inside the borders of a blockquote", () => {
+	it("reorders RTL text inside the borders of a blockquote", () => {
 		const lines = renderMarkdown("> שלום hello\n> این خط فارسی است", 40);
 		assert.ok(lines[0].startsWith("│ "), lines[0]);
 		assert.ok(!lines[0].includes("שלום"), lines[0]);

@@ -18,7 +18,7 @@ if errorlevel 1 (
 
 echo.
 echo Done. Start pi again and Arabic, Hebrew and Persian render right.
-echo Turn it off any time: settings, then RTL. Or undo with: rtl-apply-installed.bat --revert
+echo Turn it off any time: settings, then "Bidirectional text". Or undo with: rtl-apply-installed.bat --revert
 goto :end
 
 :fail

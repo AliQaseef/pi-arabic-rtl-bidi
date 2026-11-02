@@ -58,18 +58,27 @@ for (const entry of MANIFEST.files) {
 	if (mode === "revert") {
 		const bak = path.join(backup, entry.pkg, entry.target);
 		if (!exists) continue;
-		if (currentSha === patchedSha) {
-			if (fs.existsSync(bak)) {
-				fs.copyFileSync(bak, target);
-				console.log(`  restored  ${entry.pkg}/${entry.target}`);
-				ok++;
-			} else {
-				fs.rmSync(target);
-				console.log(`  removed   ${entry.pkg}/${entry.target} (added by the patch, no backup)`);
-				ok++;
-			}
-		} else {
+		if (currentSha !== patchedSha) {
 			console.log(`  left as is ${entry.pkg}/${entry.target} (not our patched build)`);
+			continue;
+		}
+		// A file the patch adds (no pristine version upstream) is deleted, even when an
+		// earlier run of the patch left a copy in the backup.
+		if (entry.added) {
+			fs.rmSync(target);
+			fs.rmSync(bak, { force: true });
+			console.log(`  removed   ${entry.pkg}/${entry.target} (added by the patch)`);
+			ok++;
+			continue;
+		}
+		if (fs.existsSync(bak)) {
+			fs.copyFileSync(bak, target);
+			console.log(`  restored  ${entry.pkg}/${entry.target}`);
+			ok++;
+		} else {
+			fs.rmSync(target);
+			console.log(`  removed   ${entry.pkg}/${entry.target} (added by the patch, no backup)`);
+			ok++;
 		}
 		continue;
 	}
@@ -79,10 +88,15 @@ for (const entry of MANIFEST.files) {
 		ok++;
 		continue;
 	}
+	// A file that is neither pristine nor the current patch is either an older patch of ours
+	// (backed up, so it is safe to update) or an upstream build we do not know.
 	if (entry.pristineSha && currentSha !== entry.pristineSha) {
-		console.log(`  SKIP      ${entry.pkg}/${entry.target} - this pi build differs from v${MANIFEST.baseVersion} (file changed by upstream or a previous patch)`);
-		fail++;
-		continue;
+		if (!fs.existsSync(path.join(backup, entry.pkg, entry.target))) {
+			console.log(`  SKIP      ${entry.pkg}/${entry.target} - this pi build differs from v${MANIFEST.baseVersion} (file changed by upstream)`);
+			fail++;
+			continue;
+		}
+		console.log(`  updating  ${entry.pkg}/${entry.target} (an older patch of ours is in the backup)`);
 	}
 	if (mode === "check") {
 		console.log(`  would patch ${entry.pkg}/${entry.target}`);
@@ -91,8 +105,10 @@ for (const entry of MANIFEST.files) {
 	}
 	fs.mkdirSync(path.dirname(target), { recursive: true });
 	if (exists) {
-		fs.mkdirSync(path.join(backup, entry.pkg, path.dirname(entry.target)), { recursive: true });
-		fs.copyFileSync(target, path.join(backup, entry.pkg, entry.target));
+		const bak = path.join(backup, entry.pkg, entry.target);
+		fs.mkdirSync(path.dirname(bak), { recursive: true });
+		// Keep the pristine copy: a later --revert must land on upstream, not on an older patch.
+		if (!fs.existsSync(bak)) fs.copyFileSync(target, bak);
 	}
 	fs.copyFileSync(kitFile, target);
 	console.log(`  patched   ${entry.pkg}/${entry.target}`);
@@ -126,6 +142,7 @@ if (mode === "revert") {
 	const probe = `import { pathToFileURL } from "node:url";
 const m = await import(pathToFileURL(${JSON.stringify(tui)}.replace(/\\\\/g, "/")).href);
 console.log("  reorderLine ->", JSON.stringify(m.reorderLine("١. اختبار الترجمة إلى اليمين")));
+console.log("  settings    ->", JSON.stringify(m.getBidiSettings()), "(from settings.json and PI_RTL)");
 `;
 	fs.writeFileSync(smokePath, probe);
 	if (mode === "apply") {

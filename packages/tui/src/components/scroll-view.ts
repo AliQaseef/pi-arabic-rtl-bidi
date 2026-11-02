@@ -1,3 +1,4 @@
+import { getBidiSettings, lineDirection } from "../bidi.ts";
 import { LAYOUT_NODE, type ScrollLayoutNode } from "../layout-node.ts";
 import { type Component, Container } from "../tui.ts";
 
@@ -215,7 +216,10 @@ export class ScrollView extends Container {
 	override render(width: number): string[] {
 		const contentWidth = this.getContentWidth(width);
 		const lines = this.child.render(contentWidth);
-		return contentWidth === width ? lines : lines.map((line) => `${line} `);
+		if (contentWidth === width) return lines;
+		// The reserved column is where the scrollbar gutter sits. For a line that reads
+		// from the right, that column belongs on the left.
+		return lines.map((line) => (getBidiSettings().align && lineDirection(line) === "rtl" ? ` ${line}` : `${line} `));
 	}
 
 	[LAYOUT_NODE](): ScrollLayoutNode {

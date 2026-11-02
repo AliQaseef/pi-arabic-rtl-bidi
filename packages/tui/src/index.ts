@@ -1,5 +1,12 @@
 // Core TUI interfaces and classes
 
+import { applyRtlSettingsFromDisk } from "./bidi.ts";
+
+// The `pi` bin of the shipped package is a bundle that inlines the settings
+// manager, so nothing calls configureBidi there. Configure RTL from the files
+// the settings manager reads when this entry point is loaded.
+applyRtlSettingsFromDisk();
+
 export { Marked, type Token, type Tokens } from "marked";
 // Autocomplete support
 export {
@@ -14,11 +21,13 @@ export {
 	alignRight,
 	type BaseDirection,
 	type BidiSettings,
+	caretOffsetAtVisualColumn,
 	configureBidi,
 	detectBaseDirection,
-	dominantDirection,
 	getBidiSettings,
 	hasStrongRtl,
+	lineDirection,
+	paintLine,
 	reorderLine,
 	reorderLineWithCaret,
 	stepCaretVisual,

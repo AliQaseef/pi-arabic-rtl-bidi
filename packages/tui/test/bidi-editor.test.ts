@@ -1,7 +1,8 @@
 import assert from "node:assert";
 import { describe, it } from "node:test";
-import { configureBidi } from "../src/bidi.ts";
+import { caretOffsetAtVisualColumn, configureBidi } from "../src/bidi.ts";
 import { Editor } from "../src/components/editor.ts";
+import type { TUI } from "../src/tui.ts";
 import { FAKE_CURSOR_START } from "../src/tui.ts";
 import { TuiMainScreen } from "../src/tui-main-screen.ts";
 import { visibleWidth } from "../src/utils.ts";
@@ -12,8 +13,36 @@ function createTestTUI(cols = 80, rows = 24): TUI {
 	return new TuiMainScreen(new VirtualTerminal(cols, rows));
 }
 
+// The editor keeps its buffer and caret in a private state; tests read it directly.
+function editorState(editor: Editor): { lines: string[]; cursorCol: number; cursorLine: number } {
+	return (editor as unknown as { state: { lines: string[]; cursorCol: number; cursorLine: number } }).state;
+}
+
 function typeInto(editor: Editor, text: string): void {
 	for (const char of text) editor.handleInput(char);
+}
+
+function click(editor: Editor, x: number, y: number, width: number): void {
+	editor.handleMouse({
+		type: "click",
+		button: "left",
+		x,
+		y,
+		width,
+		height: 24,
+		screenX: x,
+		screenY: y,
+		shift: false,
+		alt: false,
+		ctrl: false,
+	});
+}
+
+/** Column the fake cursor occupies in the rendered line, i.e. where the caret shows up. */
+function caretColumn(editor: Editor, width: number, row = 1): number {
+	const line = editor.render(width)[row]!;
+	const index = line.indexOf(FAKE_CURSOR_START);
+	return index < 0 ? -1 : visibleWidth(line.slice(0, index));
 }
 
 describe("RTL in the editor", () => {
@@ -21,7 +50,7 @@ describe("RTL in the editor", () => {
 		const editor = new Editor(createTestTUI(40), defaultEditorTheme);
 		typeInto(editor, "مرحبا");
 
-		assert.strictEqual(editor.state.lines[0], "مرحبا", "stored text stays logical");
+		assert.strictEqual(editorState(editor).lines[0], "مرحبا", "stored text stays logical");
 		const content = editor.render(40)[1]!;
 		assert.ok(content.includes("ا"), "visual line starts with the last logical grapheme");
 		assert.ok(visibleWidth(content) <= 40, "painted line does not change width");
@@ -39,21 +68,21 @@ describe("RTL in the editor", () => {
 		const editor = new Editor(createTestTUI(40), defaultEditorTheme);
 		typeInto(editor, "مرحبا");
 		// Logical caret is at the end (index 5), which is the left edge visually.
-		assert.strictEqual(editor.state.cursorCol, 5);
+		assert.strictEqual(editorState(editor).cursorCol, 5);
 
 		// Right arrow goes right on screen = one grapheme earlier in the string.
 		editor.handleInput("\x1b[C");
-		assert.strictEqual(editor.state.cursorCol, 4, "right arrow steps backwards through RTL text");
+		assert.strictEqual(editorState(editor).cursorCol, 4, "right arrow steps backwards through RTL text");
 
 		// Pressing Left at the logical end (already the visual left edge) does nothing.
 		for (let i = 0; i < 5; i++) editor.handleInput("\x1b[D");
-		assert.strictEqual(editor.state.cursorCol, 5, "caret stops at the visual left edge");
+		assert.strictEqual(editorState(editor).cursorCol, 5, "caret stops at the visual left edge");
 
 		// Right walks back through the run one grapheme at a time.
 		for (let i = 0; i < 5; i++) editor.handleInput("\x1b[C");
-		assert.strictEqual(editor.state.cursorCol, 0, "right arrow reaches the logical start");
+		assert.strictEqual(editorState(editor).cursorCol, 0, "right arrow reaches the logical start");
 		editor.handleInput("\x1b[C");
-		assert.strictEqual(editor.state.cursorCol, 0, "caret does not jump past the visual right edge");
+		assert.strictEqual(editorState(editor).cursorCol, 0, "caret does not jump past the visual right edge");
 	});
 
 	it("places the painted caret on the visual side of the grapheme it precedes", () => {
@@ -112,6 +141,87 @@ describe("RTL in the editor", () => {
 		typeInto(editor, "مرحبا");
 		editor.handleInput("\x1b[C"); // visual right = logical position 4
 		editor.handleInput("X");
-		assert.strictEqual(editor.state.lines[0], "مرحبXا", "typing lands at the logical caret");
+		assert.strictEqual(editorState(editor).lines[0], "مرحبXا", "typing lands at the logical caret");
+	});
+
+	it("puts the caret on the character the mouse is clicked on", () => {
+		const editor = new Editor(createTestTUI(40), defaultEditorTheme);
+		typeInto(editor, "مرحبا");
+
+		// Painted left to right: ا ب ح ر م. Each click has to land on the grapheme
+		// under the pointer, not on its mirror position.
+		const expected = [5, 4, 3, 2, 1];
+		for (let column = 0; column < expected.length; column++) {
+			click(editor, column, 1, 40);
+			assert.strictEqual(editorState(editor).cursorCol, expected[column], `click on column ${column}`);
+			assert.strictEqual(caretColumn(editor, 40), column, `caret paints on the clicked cell of column ${column}`);
+		}
+	});
+
+	it("clicks a right-aligned RTL line at the edge the text is painted on", () => {
+		configureBidi({ enabled: true, align: true });
+		try {
+			const editor = new Editor(createTestTUI(40), defaultEditorTheme);
+			typeInto(editor, "مرحبا");
+			// The run hugs the right edge of the 40-column line, so its cells start at 35.
+			for (const [column, logical] of [
+				[35, 5],
+				[36, 4],
+				[37, 3],
+				[38, 2],
+				[39, 1],
+			]) {
+				click(editor, column, 1, 40);
+				assert.strictEqual(editorState(editor).cursorCol, logical, `click on column ${column}`);
+				assert.strictEqual(caretColumn(editor, 40), column, `caret paints on the clicked cell of column ${column}`);
+			}
+		} finally {
+			configureBidi({ enabled: true, align: false });
+		}
+	});
+
+	it("maps clicks in a line that mixes Latin and Arabic", () => {
+		const editor = new Editor(createTestTUI(40), defaultEditorTheme);
+		typeInto(editor, "hello مرحبا world");
+		// Painted: "hello ابحرم world" - column 6 is the first painted cell of the
+		// Arabic run. The caret goes before that grapheme in logical order; no
+		// boundary can paint at column 6, so it is the nearest one.
+		click(editor, 6, 1, 40);
+		assert.strictEqual(editorState(editor).cursorCol, 10, "caret goes before the clicked ا");
+		for (const [column, logical] of [
+			[7, 10],
+			[8, 9],
+			[9, 8],
+			[10, 7],
+		]) {
+			click(editor, column, 1, 40);
+			assert.strictEqual(editorState(editor).cursorCol, logical, `click on column ${column}`);
+			assert.strictEqual(caretColumn(editor, 40), column, `caret paints on the clicked cell of column ${column}`);
+		}
+		// The Latin part of the line is untouched by the reversal.
+		click(editor, 4, 1, 40);
+		assert.strictEqual(editorState(editor).cursorCol, 4, "caret on the clicked o");
+		click(editor, 13, 1, 40);
+		assert.strictEqual(editorState(editor).cursorCol, 13, "caret on the clicked o of world");
+	});
+
+	it("leaves clicks logical when RTL rendering is off", () => {
+		configureBidi({ enabled: false, align: false });
+		try {
+			const editor = new Editor(createTestTUI(40), defaultEditorTheme);
+			typeInto(editor, "مرحبا");
+			// The line is painted exactly as written, so column and logical index agree.
+			for (let column = 0; column < 5; column++) {
+				click(editor, column, 1, 40);
+				assert.strictEqual(editorState(editor).cursorCol, column, `click on column ${column}`);
+			}
+			assert.strictEqual(
+				caretOffsetAtVisualColumn("مرحبا", 2),
+				undefined,
+				"no visual mapping for an unreordered line",
+			);
+		} finally {
+			configureBidi({ enabled: true, align: false });
+		}
 	});
 });

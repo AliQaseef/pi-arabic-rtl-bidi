@@ -1267,26 +1267,18 @@ export class SettingsManager {
 	}
 
 	setRtlEnabled(enabled: boolean): void {
-		if (!this.globalSettings.terminal) {
-			this.globalSettings.terminal = {};
-		}
-		if (!this.globalSettings.terminal.rtl) {
-			this.globalSettings.terminal.rtl = {};
-		}
-		this.globalSettings.terminal.rtl.enabled = enabled;
-		this.globalSettings.terminal.rtl.enabled = enabled;
-		this.markModified("terminal", "rtl");
-		this.save();
+		this.setRtlSetting({ enabled });
 	}
 
 	setRtlAlign(enabled: boolean): void {
-		if (!this.globalSettings.terminal) {
-			this.globalSettings.terminal = {};
-		}
-		if (!this.globalSettings.terminal.rtl) {
-			this.globalSettings.terminal.rtl = {};
-		}
-		this.globalSettings.terminal.rtl.align = enabled;
+		this.setRtlSetting({ align: enabled });
+	}
+
+	/** Write one rtl key and save: both setters go through here. */
+	private setRtlSetting(next: { enabled?: boolean; align?: boolean }): void {
+		const terminal = this.globalSettings.terminal ?? {};
+		terminal.rtl = { ...terminal.rtl, ...next };
+		this.globalSettings.terminal = terminal;
 		this.markModified("terminal", "rtl");
 		this.save();
 	}

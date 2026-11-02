@@ -1,7 +1,17 @@
 import assert from "node:assert";
 import { describe, it } from "node:test";
-import bidiModule from "bidi-js";
-import { alignRight, detectBaseDirection, dominantDirection, hasStrongRtl, reorderLine } from "../src/bidi.ts";
+import bidiModule, { type Bidi } from "bidi-js";
+import {
+	alignRight,
+	caretOffsetAtVisualColumn,
+	configureBidi,
+	detectBaseDirection,
+	hasStrongRtl,
+	lineDirection,
+	paintLine,
+	reorderLine,
+	reorderLineWithCaret,
+} from "../src/bidi.ts";
 import { visibleWidth } from "../src/utils.ts";
 
 describe("strong script detection", () => {
@@ -35,7 +45,14 @@ describe("reorderLine", () => {
 
 	it("keeps embedded Latin words in left-to-right order", () => {
 		assert.equal(reorderLine("ارسل إلى npm install ثم check"), "check مث npm install ىلإ لسرا");
-		assert.equal(reorderLine("C:/Users/ali/file.ts هذا ملف"), "C:/Users/ali/file.ts فلم اذه");
+		// The line opens with a path, but two of its three words are Arabic, so the
+		// Arabic sentence is the paragraph and the path sits inside it.
+		assert.equal(reorderLine("C:/Users/ali/file.ts هذا ملف"), "فلم اذه C:/Users/ali/file.ts");
+		// Latin owns more words here, so the Arabic stays an embedded run.
+		assert.equal(
+			reorderLine("npm run build ثم check the test then build"),
+			"npm run build مث check the test then build",
+		);
 	});
 
 	it("keeps combining marks attached to their base character", () => {
@@ -110,21 +127,43 @@ describe("reorderLine", () => {
 
 	it("aligns with the script that dominates the line", () => {
 		// No RTL content means nothing to move: the line stays where it is.
-		assert.equal(dominantDirection("hello world 1234"), undefined);
-		assert.equal(dominantDirection("مرحبا بالعالم"), "rtl");
-		assert.equal(dominantDirection("npm install ثم build the package"), "ltr");
-		assert.equal(dominantDirection("مرحبا بالعالم (mixed 1234)"), "rtl");
-		assert.equal(dominantDirection("مرحبا"), "rtl");
-		assert.equal(dominantDirection("عربي text"), "rtl");
+		assert.equal(lineDirection("hello world 1234"), undefined);
+		assert.equal(lineDirection("مرحبا بالعالم"), "rtl");
+		assert.equal(lineDirection("npm install ثم build the package"), "ltr");
+		assert.equal(lineDirection("مرحبا بالعالم (mixed 1234)"), "rtl");
+		assert.equal(lineDirection("مرحبا"), "rtl");
+		assert.equal(lineDirection("عربي text"), "rtl");
 		// Equal counts fall back to the first strong character, the same rule UAX #9
 		// uses for direction, so the script the line starts with wins.
-		assert.equal(dominantDirection("مرحبا hello"), "rtl");
-		assert.equal(dominantDirection("hello مرحبا"), "ltr");
+		assert.equal(lineDirection("مرحبا hello"), "rtl");
+		assert.equal(lineDirection("hello مرحبا"), "ltr");
+	});
+
+	it("reads a line by the script that owns it, not by its first character", () => {
+		// A renderer can put a tool name, a code span or a marker at the front of a
+		// line while the sentence behind it is Arabic. UAX #9 alone would order that
+		// line by "ask", and the Arabic would read backwards.
+		assert.equal(lineDirection("ask 3 questions (أي بريد يكتب في الـ commit؟)"), "rtl");
+		assert.equal(lineDirection("commit الـ الذي يكتب في الريبو كثيرا", "ltr"), "ltr");
+		// Escape codes are layout, not text: the letters in a style code do not
+		// tip the balance towards Latin.
+		assert.equal(lineDirection("\x1b[1mgit\x1b[0m حالة الريبو الحالية"), "rtl");
+		assert.equal(lineDirection("git status"), undefined);
+	});
+
+	it("reorders by the same rule that aligns the line", () => {
+		const line = "ask 3 questions (أي بريد يكتب في الـ commit؟)";
+		assert.equal(reorderLine(line), reorderLine(line, "rtl"));
+		assert.notEqual(reorderLine(line), reorderLine(line, "ltr"));
+		// A Latin-dominant line keeps its LTR order even when it holds Arabic words.
+		const mixed = "npm install ثم build the package";
+		assert.equal(reorderLine(mixed), reorderLine(mixed, "ltr"));
 	});
 
 	// The reference is bidi-js's own UAX #9 reordering, run on the same graphemes.
 	it("matches the bidi-js reference reordering", () => {
-		const reference = bidiModule();
+		// bidi-js exports a factory; its declaration is not callable for tsc.
+		const reference = (bidiModule as unknown as () => Bidi)();
 		const samples = [
 			"مرحبا بالعالم",
 			"الرقم 1234 هو الاصغر",
@@ -140,6 +179,84 @@ describe("reorderLine", () => {
 			const levels = reference.getEmbeddingLevels(sample, "auto");
 			const expected = reference.getReorderedString(sample, levels);
 			assert.equal(reorderLine(sample), expected, sample);
+		}
+	});
+});
+
+describe("click-to-caret mapping", () => {
+	const caretPaintsAt = (line: string, offset: number): number => {
+		const painted = reorderLineWithCaret(line, offset);
+		return painted ? visibleWidth(painted.line.slice(0, painted.caretOffset)) : -1;
+	};
+
+	it("mirrors the caret position inside an RTL run", () => {
+		// Painted ا ب ح ر م: column 0 holds the grapheme at the end of the logical string.
+		assert.equal(caretOffsetAtVisualColumn("مرحبا", 0), 5);
+		assert.equal(caretOffsetAtVisualColumn("مرحبا", 1), 4);
+		assert.equal(caretOffsetAtVisualColumn("مرحبا", 4), 1);
+		// A click past the painted text lands on the edge of the line the reader sees.
+		assert.equal(caretOffsetAtVisualColumn("مرحبا", 20), 0);
+	});
+
+	it("returns undefined for a line nothing was reordered", () => {
+		assert.equal(caretOffsetAtVisualColumn("hello world", 3), undefined);
+		configureBidi({ enabled: false });
+		try {
+			assert.equal(caretOffsetAtVisualColumn("مرحبا", 3), undefined);
+		} finally {
+			configureBidi({ enabled: true });
+		}
+	});
+
+	// Every caret position the renderer can paint has to be reachable by a click
+	// on the cell the caret occupies.
+	it("maps every painted caret column back to a logical offset", () => {
+		for (const line of ["مرحبا", "مرحبا بالعالم", "hello مرحبا world", "(قوس) مع [أقواس]"]) {
+			for (let offset = 0; offset <= line.length; offset++) {
+				const column = caretPaintsAt(line, offset);
+				const mapped = caretOffsetAtVisualColumn(line, column);
+				assert.ok(mapped !== undefined, `${line} column ${column}`);
+				assert.equal(caretPaintsAt(line, mapped), column, `${line}: offset ${offset} paints at column ${column}`);
+			}
+		}
+	});
+});
+
+describe("paintLine", () => {
+	it("paints an RTL line in visual order against the reading edge", () => {
+		configureBidi({ enabled: true, align: true });
+		try {
+			const painted = paintLine("مرحبا", 10);
+			assert.equal(painted, "     ابحرم");
+			// The padding stays part of the line, so a background wrapped around it
+			// still covers the whole row.
+			assert.equal(visibleWidth(painted), 10);
+		} finally {
+			configureBidi({ enabled: true, align: false });
+		}
+	});
+
+	it("returns the line unchanged when alignment is off", () => {
+		configureBidi({ enabled: true, align: false });
+		assert.equal(paintLine("مرحبا", 10), "ابحرم");
+	});
+
+	it("does not touch a line with no RTL content", () => {
+		configureBidi({ enabled: true, align: true });
+		try {
+			assert.equal(paintLine("hello world", 40), "hello world");
+			assert.equal(paintLine("pi is 1.4.0", 20), "pi is 1.4.0");
+		} finally {
+			configureBidi({ enabled: true, align: false });
+		}
+	});
+
+	it("paints nothing when reordering is off", () => {
+		configureBidi({ enabled: false, align: true });
+		try {
+			assert.equal(paintLine("مرحبا", 10), "مرحبا");
+		} finally {
+			configureBidi({ enabled: true, align: false });
 		}
 	});
 });

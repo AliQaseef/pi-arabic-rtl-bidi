@@ -1,3 +1,4 @@
+import { paintLine } from "./bidi.ts";
 import { Input } from "./components/input.ts";
 import { getKeybindings } from "./keybindings.ts";
 import type { Component, Focusable } from "./tui.ts";
@@ -113,9 +114,17 @@ function escapeRegExp(text: string): string {
 	return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+// A rendered RTL line holds painted cells, so searching for the words the user typed
+// also has to match the painted spelling of those words.
+function searchableQuery(query: string): string {
+	const painted = paintLine(query, query.length);
+	if (painted === query) return escapeRegExp(query);
+	return `(?:${escapeRegExp(query)}|${escapeRegExp(painted)})`;
+}
+
 function findSearchCorpusMatches(corpus: SearchCorpus, normalizedQuery: string): AltScreenSearchMatch[] {
 	if (!normalizedQuery) return [];
-	const expression = new RegExp(escapeRegExp(normalizedQuery), "giu");
+	const expression = new RegExp(searchableQuery(normalizedQuery), "giu");
 	const matches: AltScreenSearchMatch[] = [];
 	let spanIndex = 0;
 

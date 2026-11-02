@@ -1,3 +1,4 @@
+import { paintLine } from "../bidi.ts";
 import {
 	allocateImageId,
 	getCapabilities,
@@ -152,11 +153,11 @@ export class Image implements Component {
 				}
 			} else {
 				const fallback = imageFallback(this.mimeType, this.dimensions, this.options.filename);
-				lines = [truncateToWidth(this.theme.fallbackColor(fallback), width)];
+				lines = [paintLine(truncateToWidth(this.theme.fallbackColor(fallback), width), width)];
 			}
 		} else {
 			const fallback = imageFallback(this.mimeType, this.dimensions, this.options.filename);
-			lines = [truncateToWidth(this.theme.fallbackColor(fallback), width)];
+			lines = [paintLine(truncateToWidth(this.theme.fallbackColor(fallback), width), width)];
 		}
 
 		this.cachedLines = lines;

@@ -1,3 +1,4 @@
+import { lineDirection, paintedLine } from "../bidi.ts";
 import { getKeybindings } from "../keybindings.ts";
 import { decodeKittyPrintable } from "../keys.ts";
 import { KillRing } from "../kill-ring.ts";
@@ -475,14 +476,19 @@ export class Input implements Component, Focusable {
 			}
 		}
 
-		// Build line with fake cursor
-		// Insert cursor character at cursor position
-		const graphemes = [...segmenter.segment(visibleText.slice(cursorDisplay))];
+		// Build the line with the fake cursor. The field is painted in visual order,
+		// so the caret goes where the painted line says it belongs; a line with no RTL
+		// comes back unchanged and keeps the logical position.
+		const paint = paintedLine(visibleText, lineDirection(this.value));
+		const painted = paint ? paint.text : visibleText;
+		const caretIndex = paint ? paint.caretIndexAt(cursorDisplay) : cursorDisplay;
+
+		const graphemes = [...segmenter.segment(painted.slice(caretIndex))];
 		const cursorGrapheme = graphemes[0];
 
-		const beforeCursor = visibleText.slice(0, cursorDisplay);
+		const beforeCursor = painted.slice(0, caretIndex);
 		const atCursor = cursorGrapheme?.segment ?? " "; // Character at cursor, or space if at end
-		const afterCursor = visibleText.slice(cursorDisplay + atCursor.length);
+		const afterCursor = painted.slice(caretIndex + atCursor.length);
 
 		// Hardware cursor marker (zero-width, emitted before fake cursor for IME positioning)
 		const marker = this.focused ? CURSOR_MARKER : "";

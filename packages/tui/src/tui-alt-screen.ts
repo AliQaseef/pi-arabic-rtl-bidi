@@ -4,6 +4,7 @@ import {
 	type AltScreenSearchMatch,
 	getAltScreenSearchMatchKey,
 } from "./alt-screen-search.ts";
+import { unpaintLine } from "./bidi.ts";
 import { AltScreenFlashContainer } from "./components/alt-screen-flash.ts";
 import { ScrollView } from "./components/scroll-view.ts";
 import { getKeybindings } from "./keybindings.ts";
@@ -1464,11 +1465,10 @@ export class TuiAltScreen extends TuiBase implements ViewportTUI {
 		for (let row = selection.start.row; row <= selection.end.row; row++) {
 			const line = sourceLines[row] ?? "";
 			const columns = this.getSelectionColumns(line, row, selection);
-			lines.push(
-				stripTerminalSequences(
-					sliceByColumn(line, columns.start, Math.max(0, columns.end - columns.start), true),
-				).trimEnd(),
-			);
+			// The selection is cut from the painted line. Un-painting it gives back the text
+			// the user typed, so copying an Arabic line does not yield mirrored graphemes.
+			const painted = sliceByColumn(line, columns.start, Math.max(0, columns.end - columns.start), true);
+			lines.push(stripTerminalSequences(unpaintLine(painted)).trimEnd());
 		}
 		const text = lines.join("\n");
 		return text.length === 0 ? undefined : text;

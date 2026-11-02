@@ -1,3 +1,4 @@
+import { paintLine } from "../bidi.ts";
 import { fuzzyFilter } from "../fuzzy.ts";
 import { getKeybindings, getSelectPageIndex } from "../keybindings.ts";
 import type { Component, TuiMouseEvent, TuiMouseEventResult } from "../tui.ts";
@@ -121,7 +122,7 @@ export class SettingsList implements Component {
 
 		const displayItems = this.getDisplayItems();
 		if (displayItems.length === 0) {
-			lines.push(truncateToWidth(this.theme.hint("  No matching settings"), width));
+			lines.push(paintLine(truncateToWidth(this.theme.hint("  No matching settings"), width), width));
 			this.addHintLine(lines, width);
 			return lines;
 		}
@@ -141,16 +142,20 @@ export class SettingsList implements Component {
 			const prefix = isSelected ? this.theme.cursor : "  ";
 			const prefixWidth = visibleWidth(prefix);
 
-			// Pad label to align values
+			// Pad label to align values, then paint it inside its column: an RTL label hugs
+			// the edge its script reads from without moving the column boundary.
 			const labelPadded = item.label + " ".repeat(Math.max(0, maxLabelWidth - visibleWidth(item.label)));
-			const labelText = this.theme.label(labelPadded, isSelected);
+			const labelText = this.theme.label(paintLine(labelPadded, maxLabelWidth), isSelected);
 
 			// Calculate space for value
 			const separator = "  ";
 			const usedWidth = prefixWidth + maxLabelWidth + visibleWidth(separator);
 			const valueMaxWidth = width - usedWidth - 2;
 
-			const valueText = this.theme.value(truncateToWidth(item.currentValue, valueMaxWidth, ""), isSelected);
+			const valueText = this.theme.value(
+				paintLine(truncateToWidth(item.currentValue, valueMaxWidth, ""), valueMaxWidth),
+				isSelected,
+			);
 
 			lines.push(truncateToWidth(prefix + labelText + separator + valueText, width));
 		}
@@ -167,7 +172,7 @@ export class SettingsList implements Component {
 			lines.push("");
 			const wrappedDesc = wrapTextWithAnsi(selectedItem.description, width - 4);
 			for (const line of wrappedDesc) {
-				lines.push(this.theme.description(`  ${line}`));
+				lines.push(paintLine(this.theme.description(`  ${line}`), width - 2));
 			}
 		}
 

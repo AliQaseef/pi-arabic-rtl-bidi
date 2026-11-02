@@ -472,12 +472,12 @@
           "properties": {
             "enabled": {
               "type": "boolean",
-              "description": "Reorder right-to-left text for display so Arabic, Hebrew and Persian render in visual order.",
+              "description": "Reorder right-to-left text for display so Arabic and Persian render in visual order.",
               "default": true
             },
             "align": {
               "type": "boolean",
-              "description": "Put a line against the edge its dominant script reads from: Arabic, Hebrew and Persian lines go right, English stays left, and a mixed line follows whichever script has more strong characters.",
+              "description": "Put a line against the edge its dominant script reads from: Arabic and Persian lines go right, English stays left, and a mixed line follows whichever script has more strong characters.",
               "default": true
             }
           }

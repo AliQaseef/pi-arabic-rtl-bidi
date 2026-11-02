@@ -1,3 +1,6 @@
+import fs from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import bidiModule, { type Bidi } from "bidi-js";
 import { extractAnsiCode, getGraphemeSegmenter, visibleWidth } from "./utils.ts";
 
@@ -31,33 +34,73 @@ const bidi: Bidi = (bidiModule as unknown as () => Bidi)();
 // caret or the padding in the wrong column.
 const movableEscapeRegex = /^(\x1b\[[0-9;]*m|\x1b\]8;[^;]*;[^\x07\x1b]*(?:\x07|\x1b\\))$/;
 
+// Used to count scripts in a line: styling and hyperlink codes are layout, not text.
+const ansiEscapeRegex = /\x1b\[[0-9;]*[A-Za-z]|\x1b\]8;[^;]*;[^\x07\x1b]*(?:\x07|\x1b\\)/g;
+
 export type BaseDirection = "ltr" | "rtl";
 
 export interface BidiSettings {
 	/** Reorder RTL lines into visual order. Off makes rendering exactly what it was before. */
 	enabled: boolean;
-	/** Move a line to the side its dominant script reads from. Off by default: alignment touches padding, the scrollbar gutter and overlay compositing. */
+	/** Move a line to the edge its reading direction points at. Off by default: alignment touches padding, the scrollbar gutter and overlay compositing. */
 	align: boolean;
 }
 
 const settings: BidiSettings = { enabled: true, align: false };
+
+/**
+ * Settings defaults for a release that never calls configureBidi.
+ *
+ * The `pi` bin of the shipped package is a bundle that inlines the settings
+ * manager and the interactive mode, so the wiring in interactive-mode.ts never
+ * runs there. RTL stays off unless the user's settings turn it on: the agent
+ * settings file, then the project settings file, then PI_RTL.
+ */
+export function applyRtlSettingsFromDisk(): void {
+	const agentDir = process.env.PI_CODING_AGENT_DIR || join(homedir(), ".pi", "agent");
+	const resolved: BidiSettings = { enabled: false, align: true };
+	for (const file of [join(agentDir, "settings.json"), join(process.cwd(), ".pi", "settings.json")]) {
+		let raw: unknown;
+		try {
+			raw = JSON.parse(fs.readFileSync(file, "utf8"));
+		} catch {
+			continue;
+		}
+		const rtl = (raw as { terminal?: { rtl?: { enabled?: boolean; align?: boolean } } })?.terminal?.rtl;
+		if (rtl?.enabled !== undefined) resolved.enabled = rtl.enabled;
+		if (rtl?.align !== undefined) resolved.align = rtl.align;
+	}
+	if (process.env.PI_RTL === "0") resolved.enabled = false;
+	configureBidi(resolved);
+}
 
 export function configureBidi(next: Partial<BidiSettings>): void {
 	Object.assign(settings, next);
 }
 
 export function getBidiSettings(): BidiSettings {
-	return settings;
+	// Alignment is part of the bidi layout: with reordering off the line is drawn
+	// exactly as written, so it cannot hug the reading edge either.
+	return { enabled: settings.enabled, align: settings.enabled && settings.align };
+}
+
+/**
+ * Render caches key on this string. A component that caches painted lines has to
+ * repaint when the settings change, and this is the value it compares against.
+ */
+export function bidiSettingsKey(): string {
+	const current = getBidiSettings();
+	return `${current.enabled}:${current.align}`;
 }
 
 /**
  * Does this text contain a strong right-to-left character?
  *
- * Strong means the character itself carries a direction: Arabic and Hebrew
- * letters do, their combining marks do not. A Latin string carrying an Arabic
+ * Strong means the character itself carries a direction: Arabic letters do,
+ * their combining marks do not. A Latin string carrying an Arabic
  * vowel mark is therefore still left-to-right.
  */
-// Arabic, Hebrew and the other RTL blocks in the Unicode ranges that carry a
+// Arabic and the other RTL blocks in the Unicode ranges that carry a
 // strong RTL direction. Cheaper than segmenting every line of a mostly-ASCII
 // transcript; anything outside these ranges is checked by the bidi table below.
 const rtlScriptRegex = /[\u0590-\u06FF\u070C-\u0740\u0850-\u085F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/;
@@ -81,34 +124,53 @@ export function detectBaseDirection(text: string, forced?: BaseDirection): BaseD
 }
 
 /**
- * Which edge a line should sit against.
+ * Which way a line is read: one rule for both halves of the layout, the order of
+ * the characters inside the line and the edge the line sits against.
  *
- * Direction tells how the characters inside a line are ordered; alignment is a
- * separate question. A line is aligned with the script that dominates it:
- * English stays at the left edge, Arabic goes to the right edge, and a mixed
- * line - "npm install ثم build" - follows whichever script has more strong
- * characters. When the two scripts tie, the first strong character decides, the
- * same rule UAX #9 uses for direction.
+ * UAX #9 takes a paragraph's direction from its first strong character. That is
+ * right for prose and wrong for a terminal line, which usually opens with
+ * something the renderer put there - a tool name, a code span, a list marker -
+ * while the sentence after it is Arabic:
+ *
+ *   ask 3 questions (أي بريد يكتب في الـ commit؟)
+ *
+ * Ordered by its first character that line reads backwards. The rule used here:
+ * a line that opens in RTL is RTL. A line that opens in Latin is RTL only when
+ * Arabic words outnumber Latin ones. Words, not characters, because a path or a
+ * command is one word while the sentence around it is many.
  *
  * Undefined means the line has no RTL content at all, so nothing moves.
  */
-export function dominantDirection(text: string): BaseDirection | undefined {
-	if (!hasStrongRtl(text)) return undefined;
+export function lineDirection(text: string, forced?: BaseDirection): BaseDirection | undefined {
+	if (forced) return forced;
+	// Escape codes are layout, not content: the letters in a style code are not
+	// words the reader is reading.
+	const content = text.replace(ansiEscapeRegex, "");
+	if (!rtlScriptRegex.test(content)) return undefined;
 
-	let rtlCount = 0;
-	let ltrCount = 0;
-	for (const { segment } of getGraphemeSegmenter().segment(text)) {
-		const type = bidi.getBidiCharTypeName(segment[0] ?? "");
-		if (type === "R" || type === "AL") rtlCount++;
-		else if (type === "L") ltrCount++;
+	let rtlWords = 0;
+	let ltrWords = 0;
+	let firstStrong: BaseDirection | undefined;
+	for (const token of content.split(/\s+/)) {
+		for (const { segment } of getGraphemeSegmenter().segment(token)) {
+			const type = bidi.getBidiCharTypeName(segment[0] ?? "");
+			if (type === "R" || type === "AL") {
+				if (!firstStrong) firstStrong = "rtl";
+				rtlWords++;
+				break;
+			}
+			if (type === "L") {
+				if (!firstStrong) firstStrong = "ltr";
+				ltrWords++;
+				break;
+			}
+		}
 	}
 
-	if (rtlCount === 0) return undefined;
-	if (rtlCount > ltrCount) return "rtl";
-	if (ltrCount > rtlCount) return "ltr";
-	return detectBaseDirection(text);
+	if (rtlWords === 0) return undefined;
+	if (firstStrong === "rtl") return "rtl";
+	return rtlWords > ltrWords ? "rtl" : "ltr";
 }
-
 // The styling that applies to a grapheme, tracked as attributes rather than as a
 // joined string of codes. Reordering a line has to close the attributes that end
 // and open the ones that start; emitting a bare `\x1b[0m` would also clear the
@@ -322,17 +384,24 @@ function mirror(grapheme: string): string {
 	return mirrored;
 }
 
-function emitCells(cells: Cell[], trailing: string): string {
+// Emit the cells in the order given, carrying each grapheme's styling with it. The
+// caret cell has no width of its own; its position in the emitted string is
+// reported so the caller can put the cursor there.
+function emitCells(cells: Cell[], trailing: string): { text: string; caretIndex: number } {
 	let out = "";
 	let emittedState: SgrState | undefined;
+	let caretIndex = 0;
 
 	for (const cell of cells) {
-		if (cell.isCaret) continue;
+		if (cell.isCaret) {
+			caretIndex = out.length;
+			continue;
+		}
 		out += sgrTransition(emittedState ?? defaultState, cell.state);
 		emittedState = cell.state;
 		out += cell.level % 2 === 1 ? mirror(cell.grapheme) : cell.grapheme;
 	}
-	return out + trailing;
+	return { text: out + trailing, caretIndex };
 }
 
 /**
@@ -341,16 +410,163 @@ function emitCells(cells: Cell[], trailing: string): string {
  * is bit for bit what it was before.
  */
 export function reorderLine(line: string, forced?: BaseDirection): string {
-	if (!settings.enabled || !hasStrongRtl(line) || line.includes("\n")) return line;
+	return paintedLine(line, forced)?.text ?? line;
+}
 
-	const parsed = parseCells(line);
-	if (parsed.cells.length === 0) return line;
+// The painted text of every line the renderer wrote, mapped back to the logical text
+// it came from. Selection and search read painted lines, so this is how they get the
+// text the user typed.
+const logicalByPainted = new Map<string, string>();
+const PAINT_MEMORY_LIMIT = 4000;
 
-	const range = resolveLevels(parsed.cells, parsed.cells.map((cell) => cell.grapheme).join(""), forced);
-	if (!range) return line;
+function rememberPainted(text: string, logical: string): void {
+	if (logicalByPainted.size >= PAINT_MEMORY_LIMIT) {
+		const oldest = logicalByPainted.keys().next().value;
+		if (oldest !== undefined) logicalByPainted.delete(oldest);
+	}
+	logicalByPainted.set(text, logical);
+}
+
+/**
+ * The logical text a painted line came from: brackets un-mirrored, runs put back in
+ * the order they were written. Exact for a line painted in this process, approximate
+ * for a fragment of one (the paragraph direction has to be re-detected from the
+ * painted cells).
+ */
+export function unpaintLine(painted: string): string {
+	const remembered = logicalByPainted.get(painted);
+	if (remembered !== undefined) return remembered;
+
+	if (!getBidiSettings().enabled || !hasStrongRtl(painted)) return painted;
+
+	const parsed = parseCells(painted);
+	if (parsed.cells.length === 0) return painted;
+
+	const logical = parsed.cells.map((cell) => cell.grapheme).join("");
+	const range = resolveLevels(parsed.cells, logical, lineDirection(logical));
+	if (!range) return painted;
 
 	reverseRuns(parsed.cells, range[0], range[1]);
-	return emitCells(parsed.cells, parsed.trailing);
+	return emitCells(parsed.cells, parsed.trailing).text;
+}
+
+/**
+ * Paint one rendered line: split it into grapheme cells, resolve embedding levels
+ * and reverse the RTL runs once, then keep everything a caller might want to know
+ * about that line - the text to write, where a caret lands, which logical offset a
+ * click on a column points at. Every operation on the same line reuses this one
+ * parse instead of parsing again.
+ *
+ * Undefined means the line has nothing to reorder, so the caller keeps its own
+ * logical handling and English rendering is bit for bit what it was before.
+ */
+export interface PaintedLine {
+	/** The line exactly as it is written to the terminal. */
+	text: string;
+	/** The direction the line reads: the forced one, or the detected one. */
+	direction: BaseDirection;
+	/** Index into `text` where a caret at a logical offset sits. */
+	caretIndexAt(logicalOffset: number): number;
+	/** Column of the painted line where a caret at a logical offset sits. */
+	caretColumnAt(logicalOffset: number): number;
+	/** Logical offset whose caret paints nearest to a painted column. */
+	caretOffsetAtColumn(column: number): number | undefined;
+	/** Logical offset one cell further in visual direction; the same offset at the edge of the line. */
+	stepCaret(logicalOffset: number, direction: 1 | -1): number;
+}
+
+export function paintedLine(line: string, forced?: BaseDirection): PaintedLine | undefined {
+	if (!getBidiSettings().enabled || line.includes("\n") || !hasStrongRtl(line)) return undefined;
+
+	const parsed = parseCells(line);
+	if (parsed.cells.length === 0) return undefined;
+
+	const logical = parsed.cells.map((cell) => cell.grapheme).join("");
+	const range = resolveLevels(parsed.cells, logical, forced ?? lineDirection(logical));
+	if (!range) return undefined;
+	const [maxLevel, minOddLevel] = range;
+
+	const visual = [...parsed.cells];
+	reverseRuns(visual, maxLevel, minOddLevel);
+
+	const paintedWithCaret = (offset: number): { text: string; caretIndex: number } => {
+		const withCaret = insertCaretCell(parsed.cells, boundaryAt(parsed.cells, offset));
+		reverseRuns(withCaret, maxLevel, minOddLevel);
+		return emitCells(withCaret, parsed.trailing);
+	};
+
+	const caretColumns = new Map<number, number>();
+
+	const caretColumnAt = (offset: number): number => {
+		const cached = caretColumns.get(offset);
+		if (cached !== undefined) return cached;
+		const painted = paintedWithCaret(offset);
+		const column = visibleWidth(painted.text.slice(0, painted.caretIndex));
+		caretColumns.set(offset, column);
+		return column;
+	};
+
+	const stepCaret = (offset: number, direction: 1 | -1): number => {
+		const withCaret = insertCaretCell(parsed.cells, boundaryAt(parsed.cells, offset));
+		reverseRuns(withCaret, maxLevel, minOddLevel);
+		const caretIndex = withCaret.findIndex((cell) => cell.isCaret);
+		const crossed = withCaret[caretIndex + direction];
+		// The caret is already at the edge of the painted line: it cannot go further.
+		if (!crossed || crossed.isCaret) return offset;
+
+		// In an RTL run the grapheme the caret stepped over sits on the other side of
+		// the caret, so the boundary moves to its start; in an LTR run, to its end.
+		const rtlRun = crossed.level % 2 === 1;
+		return (direction === 1) === rtlRun ? crossed.logicalStart : crossed.logicalEnd;
+	};
+
+	const caretOffsetAtColumn = (column: number): number | undefined => {
+		// The cell under the click. A click past the painted text belongs to the last
+		// cell, so the caret lands at the edge of the line the reader is looking at.
+		let cell: Cell | undefined;
+		let paintedColumn = 0;
+		for (const visualCell of visual) {
+			cell = visualCell;
+			if (column < paintedColumn + Math.max(1, visibleWidth(visualCell.grapheme))) break;
+			paintedColumn += Math.max(1, visibleWidth(visualCell.grapheme));
+		}
+		if (!cell) return undefined;
+
+		// Two boundaries touch this grapheme: before it and after it in logical order.
+		// The reversal leaves one of them next to the clicked cell, so pick whichever
+		// caret paints nearest the click.
+		const before = Math.abs(caretColumnAt(cell.logicalStart) - column);
+		const after = Math.abs(caretColumnAt(cell.logicalEnd) - column);
+		return after < before ? cell.logicalEnd : cell.logicalStart;
+	};
+
+	const paintedText = emitCells(visual, parsed.trailing).text;
+	rememberPainted(paintedText, logical);
+
+	return {
+		text: paintedText,
+		direction: forced ?? lineDirection(logical) ?? "ltr",
+		caretIndexAt: (offset: number) => paintedWithCaret(offset).caretIndex,
+		caretColumnAt,
+		caretOffsetAtColumn,
+		stepCaret,
+	};
+}
+
+/**
+ * Paint one rendered line: put it in visual order, then, when alignment is on,
+ * move it to the edge its script reads from. `width` is the column the line lives
+ * in, so the padding that fills the column stays part of the line and a
+ * background wrapped around the line still covers the whole row.
+ *
+ * This is the seam every component that writes a line to the terminal goes
+ * through. Callers do not need `lineDirection`, `reorderLine` and `alignRight`
+ * themselves, and lines with no RTL content come back unchanged.
+ */
+export function paintLine(line: string, width: number, forced?: BaseDirection): string {
+	const paint = paintedLine(line, forced);
+	if (!paint) return line;
+	return getBidiSettings().align && paint.direction === "rtl" ? alignRight(paint.text, width) : paint.text;
 }
 
 /**
@@ -391,38 +607,14 @@ export function reorderLineWithCaret(
 	caretOffset: number,
 	forced?: BaseDirection,
 ): { line: string; caretOffset: number } | undefined {
-	if (!settings.enabled || !hasStrongRtl(line) || line.includes("\n")) return undefined;
-
-	const parsed = parseCells(line);
-	if (parsed.cells.length === 0) return undefined;
-
-	const range = resolveLevels(parsed.cells, line, forced);
-	if (!range) return undefined;
-
-	const withCaret = insertCaretCell(parsed.cells, boundaryAt(parsed.cells, caretOffset));
-	reverseRuns(withCaret, range[0], range[1]);
-
-	let out = "";
-	let emittedState: SgrState | undefined;
-	let caretIndex = 0;
-	for (const cell of withCaret) {
-		if (cell.isCaret) {
-			caretIndex = out.length;
-			continue;
-		}
-		out += sgrTransition(emittedState ?? defaultState, cell.state);
-		emittedState = cell.state;
-		out += cell.level % 2 === 1 ? mirror(cell.grapheme) : cell.grapheme;
-	}
-	return { line: out + parsed.trailing, caretOffset: caretIndex };
+	const paint = paintedLine(line, forced);
+	if (!paint) return undefined;
+	return { line: paint.text, caretOffset: paint.caretIndexAt(caretOffset) };
 }
 
 /**
-
-/**
  * Where the caret goes when an arrow key moves it one cell in visual direction.
- * Undefined for lines with no RTL (the caller keeps its logical step) or when
- * the caret is already at the edge of the line.
+ * Undefined for lines with no RTL (the caller keeps its logical step).
  */
 export function stepCaretVisual(
 	line: string,
@@ -430,27 +622,22 @@ export function stepCaretVisual(
 	direction: 1 | -1,
 	forced?: BaseDirection,
 ): number | undefined {
-	if (!settings.enabled || !hasStrongRtl(line) || line.includes("\n")) return undefined;
+	return paintedLine(line, forced)?.stepCaret(caretOffset, direction);
+}
 
-	const parsed = parseCells(line);
-	if (parsed.cells.length === 0) return undefined;
-
-	const range = resolveLevels(parsed.cells, line, forced);
-	if (!range) return undefined;
-
-	const withCaret = insertCaretCell(parsed.cells, boundaryAt(parsed.cells, caretOffset));
-	reverseRuns(withCaret, range[0], range[1]);
-
-	const caretIndex = withCaret.findIndex((cell) => cell.isCaret);
-	const crossed = withCaret[caretIndex + direction];
-	// The caret is already at the edge of the painted line: it cannot go further.
-	if (!crossed || crossed.isCaret) return caretOffset;
-
-	// The caret crossed one grapheme. In an RTL run the grapheme it stepped over
-	// sits on the other side of the caret, so the boundary moves to the start of
-	// that grapheme; in an LTR run it moves to the end.
-	const rtlRun = crossed.level % 2 === 1;
-	return (direction === 1) === rtlRun ? crossed.logicalStart : crossed.logicalEnd;
+/**
+ * Which logical caret offset paints a caret at a given column of the reordered
+ * line. A mouse click is a visual column; the editor's cursor is a logical offset,
+ * so the click has to go through the same reversal the renderer used.
+ *
+ * Undefined for lines with no RTL, so the caller keeps its own logical walk.
+ */
+export function caretOffsetAtVisualColumn(
+	line: string,
+	visualColumn: number,
+	forced?: BaseDirection,
+): number | undefined {
+	return paintedLine(line, forced)?.caretOffsetAtColumn(visualColumn);
 }
 
 /** Pad a line on the left so it ends at the right edge of the column. */

@@ -1,4 +1,4 @@
-import { alignRight, dominantDirection, getBidiSettings, reorderLine } from "../bidi.ts";
+import { bidiSettingsKey, lineDirection, paintLine } from "../bidi.ts";
 import type { Component } from "../tui.ts";
 import { applyBackgroundToLine, flattenLines, visibleWidth, wrapTextWithAnsi } from "../utils.ts";
 
@@ -15,6 +15,7 @@ export class Text implements Component {
 	private cachedText?: string;
 	private cachedWidth?: number;
 	private cachedLines?: string[];
+	private cachedBidiKey?: string;
 
 	constructor(text: string = "", paddingX: number = 1, paddingY: number = 1, customBgFn?: (text: string) => string) {
 		this.text = text;
@@ -51,8 +52,16 @@ export class Text implements Component {
 	}
 
 	render(width: number): string[] {
+		// Painted lines depend on the bidi settings, so a change has to repaint even
+		// when the text and the width did not.
+		const bidiKey = bidiSettingsKey();
 		// Check cache
-		if (this.cachedLines && this.cachedText === this.text && this.cachedWidth === width) {
+		if (
+			this.cachedLines &&
+			this.cachedText === this.text &&
+			this.cachedWidth === width &&
+			this.cachedBidiKey === bidiKey
+		) {
 			return this.cachedLines;
 		}
 
@@ -61,6 +70,7 @@ export class Text implements Component {
 			const result: string[] = [];
 			this.cachedText = this.text;
 			this.cachedWidth = width;
+			this.cachedBidiKey = bidiKey;
 			this.cachedLines = result;
 			return result;
 		}
@@ -74,13 +84,12 @@ export class Text implements Component {
 
 		// Wrap text (this preserves ANSI codes but does NOT pad). Wrapping works on the
 		// logical text; each visual line is then reordered and, when alignment is on,
-		// pushed to the edge its dominant script reads from.
-		const wrappedLines = wrapTextWithAnsi(normalizedText, contentWidth).map((line) => {
-			const visual = reorderLine(line);
-			return getBidiSettings().align && dominantDirection(line) === "rtl"
-				? alignRight(visual, contentWidth)
-				: visual;
-		});
+		// pushed to the edge the text reads from. One text has one direction, so every
+		// wrapped line of it is painted the same way.
+		const direction = lineDirection(normalizedText);
+		const wrappedLines = wrapTextWithAnsi(normalizedText, contentWidth).map((line) =>
+			paintLine(line, contentWidth, direction),
+		);
 
 		// Add margins and background to each line
 		const leftMargin = " ".repeat(paddingX);
@@ -113,9 +122,9 @@ export class Text implements Component {
 		const result = [...emptyLines, ...contentLines, ...emptyLines];
 		flattenLines(result);
 
-		// Update cache
 		this.cachedText = this.text;
 		this.cachedWidth = width;
+		this.cachedBidiKey = bidiKey;
 		this.cachedLines = result;
 
 		return result.length > 0 ? result : [""];
