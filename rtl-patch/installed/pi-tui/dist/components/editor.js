@@ -452,7 +452,18 @@ export class Editor {
                 const after = displayText.slice(caretPos);
                 // Hardware cursor marker (zero-width, emitted before fake cursor for IME positioning)
                 const marker = emitCursorMarker ? CURSOR_MARKER : "";
-                if (after.length > 0) {
+                if (after.length > 0 && caretPos === 0 && paint?.direction === "rtl") {
+                    // A caret at the reading end of a right-to-left line has no character after
+                    // it, exactly like the end of a Latin line: it gets its own blank cell, so
+                    // the blank the user typed stays between the caret and the word.
+                    const cursor = renderFakeCursor(" ");
+                    displayText = marker + cursor + after;
+                    lineVisibleWidth = lineVisibleWidth + 1;
+                    if (lineVisibleWidth > contentWidth && paddingX > 0) {
+                        cursorInPadding = true;
+                    }
+                }
+                else if (after.length > 0) {
                     // Cursor is on a character (grapheme) - replace it with highlighted version
                     // Get the first grapheme from 'after'
                     const afterGraphemes = [...this.segment(after, "grapheme")];

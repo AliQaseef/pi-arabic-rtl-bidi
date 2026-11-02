@@ -153,6 +153,25 @@ describe("RTL in the editor", () => {
 		}
 	});
 
+	it("gives the caret its own blank cell outside an RTL run, like a Latin line", () => {
+		configureBidi({ enabled: true, align: true });
+		try {
+			const editor = new Editor(createTestTUI(40), defaultEditorTheme);
+			typeInto(editor, "مرحبا ");
+			const line = editor.render(40)[1]!;
+			const painted = line.replace(/\x1b[^\x07]*\x07/g, "").replace(/\x1b\[[0-9;]*m/g, "");
+			const caretAt = visibleWidth(painted.slice(0, line.indexOf(FAKE_CURSOR_START)));
+			// The caret's cell, then the blank the writer typed, then the word: nothing is
+			// hidden under the caret, so the reader sees the space the caret sits after.
+			assert.equal(painted.charAt(caretAt), " ", painted);
+			assert.equal(painted.charAt(caretAt + 1), " ", painted);
+			assert.ok(painted.startsWith("ا", caretAt + 2), painted);
+			assert.equal(visibleWidth(line), 40, line);
+		} finally {
+			configureBidi({ enabled: true, align: false });
+		}
+	});
+
 	it("inserts at the caret position when typing in the middle of an RTL line", () => {
 		const editor = new Editor(createTestTUI(40), defaultEditorTheme);
 		typeInto(editor, "مرحبا");
@@ -181,16 +200,18 @@ describe("RTL in the editor", () => {
 			const editor = new Editor(createTestTUI(40), defaultEditorTheme);
 			typeInto(editor, "مرحبا");
 			// The run hugs the right edge of the 40-column line, so its cells start at 35.
-			for (const [column, logical] of [
-				[35, 5],
-				[36, 4],
-				[37, 3],
-				[38, 2],
-				[39, 1],
+			// A click on the last cell lands the caret at the end of the text, and that caret
+			// gets its own blank cell just outside the run, the way a Latin line's does.
+			for (const [column, logical, caretAt] of [
+				[35, 5, 34],
+				[36, 4, 36],
+				[37, 3, 37],
+				[38, 2, 38],
+				[39, 1, 39],
 			]) {
 				click(editor, column, 1, 40);
 				assert.strictEqual(editorState(editor).cursorCol, logical, `click on column ${column}`);
-				assert.strictEqual(caretColumn(editor, 40), column, `caret paints on the clicked cell of column ${column}`);
+				assert.strictEqual(caretColumn(editor, 40), caretAt, `caret paints beside the cell of column ${column}`);
 			}
 		} finally {
 			configureBidi({ enabled: true, align: false });

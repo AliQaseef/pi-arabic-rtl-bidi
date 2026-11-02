@@ -1149,7 +1149,7 @@ index 000000000..921459304
 +	return padding > 0 ? " ".repeat(padding) + line : line;
 +}
 diff --git a/packages/tui/src/components/editor.ts b/packages/tui/src/components/editor.ts
-index 9fd3677e9..91d906f66 100644
+index 9fd3677e9..8e7475754 100644
 --- a/packages/tui/src/components/editor.ts
 +++ b/packages/tui/src/components/editor.ts
 @@ -1,4 +1,12 @@
@@ -1205,7 +1205,7 @@ index 9fd3677e9..91d906f66 100644
  		const currentVisualLine = this.findCurrentVisualLine(visualLines);
  		return currentVisualLine === visualLines.length - 1;
  	}
-@@ -575,14 +597,21 @@ export class Editor implements Component, Focusable {
+@@ -575,19 +597,36 @@ export class Editor implements Component, Focusable {
  		const emitCursorMarker = this.focused;
  
  		for (const layoutLine of visibleLines) {
@@ -1231,7 +1231,23 @@ index 9fd3677e9..91d906f66 100644
  
  				// Hardware cursor marker (zero-width, emitted before fake cursor for IME positioning)
  				const marker = emitCursorMarker ? CURSOR_MARKER : "";
-@@ -609,11 +638,20 @@ export class Editor implements Component, Focusable {
+ 
+-				if (after.length > 0) {
++				if (after.length > 0 && caretPos === 0 && paint?.direction === "rtl") {
++					// A caret at the reading end of a right-to-left line has no character after
++					// it, exactly like the end of a Latin line: it gets its own blank cell, so
++					// the blank the user typed stays between the caret and the word.
++					const cursor = renderFakeCursor(" ");
++					displayText = marker + cursor + after;
++					lineVisibleWidth = lineVisibleWidth + 1;
++					if (lineVisibleWidth > contentWidth && paddingX > 0) {
++						cursorInPadding = true;
++					}
++				} else if (after.length > 0) {
+ 					// Cursor is on a character (grapheme) - replace it with highlighted version
+ 					// Get the first grapheme from 'after'
+ 					const afterGraphemes = [...this.segment(after, "grapheme")];
+@@ -609,11 +648,20 @@ export class Editor implements Component, Focusable {
  			}
  
  			// Calculate padding based on actual visible width
@@ -1254,7 +1270,7 @@ index 9fd3677e9..91d906f66 100644
  		}
  
  		// Render bottom border (with scroll indicator if more content below)
-@@ -663,37 +701,51 @@ export class Editor implements Component, Focusable {
+@@ -663,37 +711,51 @@ export class Editor implements Component, Focusable {
  		if (event.type !== "click" || event.button !== "left") return undefined;
  		if (event.y <= 0 || event.y > this.renderedVisibleLineCount) return { handled: true, focus: true };
  
@@ -1331,7 +1347,7 @@ index 9fd3677e9..91d906f66 100644
  		if (this.autocompleteState) this.updateAutocomplete();
  		return { handled: true, focus: true };
  	}
-@@ -1011,6 +1063,9 @@ export class Editor implements Component, Focusable {
+@@ -1011,6 +1073,9 @@ export class Editor implements Component, Focusable {
  		if (this.state.lines.length === 0 || (this.state.lines.length === 1 && this.state.lines[0] === "")) {
  			// Empty editor
  			layoutLines.push({
@@ -1341,7 +1357,7 @@ index 9fd3677e9..91d906f66 100644
  				text: "",
  				hasCursor: true,
  				cursorPos: 0,
-@@ -1023,19 +1078,32 @@ export class Editor implements Component, Focusable {
+@@ -1023,19 +1088,32 @@ export class Editor implements Component, Focusable {
  			const line = this.state.lines[i] || "";
  			const isCurrentLine = i === this.state.cursorLine;
  			const lineVisibleWidth = visibleWidth(line);
@@ -1374,7 +1390,7 @@ index 9fd3677e9..91d906f66 100644
  					});
  				}
  			} else {
-@@ -1074,16 +1142,27 @@ export class Editor implements Component, Focusable {
+@@ -1074,16 +1152,27 @@ export class Editor implements Component, Focusable {
  						}
  					}
  
@@ -1402,7 +1418,7 @@ index 9fd3677e9..91d906f66 100644
  						});
  					}
  				}
-@@ -1835,39 +1914,15 @@ export class Editor implements Component, Focusable {
+@@ -1835,39 +1924,15 @@ export class Editor implements Component, Focusable {
  			}
  		}
  	}
@@ -1449,7 +1465,7 @@ index 9fd3677e9..91d906f66 100644
  	}
  
  	/**
-@@ -1903,7 +1958,7 @@ export class Editor implements Component, Focusable {
+@@ -1903,7 +1968,7 @@ export class Editor implements Component, Focusable {
  
  	private moveCursor(deltaLine: number, deltaCol: number): void {
  		this.lastAction = null;
@@ -1458,7 +1474,7 @@ index 9fd3677e9..91d906f66 100644
  		const currentVisualLine = this.findCurrentVisualLine(visualLines);
  
  		if (deltaLine !== 0) {
-@@ -1917,6 +1972,16 @@ export class Editor implements Component, Focusable {
+@@ -1917,6 +1982,16 @@ export class Editor implements Component, Focusable {
  		if (deltaCol !== 0) {
  			const currentLine = this.state.lines[this.state.cursorLine] || "";
  
@@ -1475,7 +1491,7 @@ index 9fd3677e9..91d906f66 100644
  			if (deltaCol > 0) {
  				// Moving right - move by one grapheme (handles emojis, combining characters, etc.)
  				if (this.state.cursorCol < currentLine.length) {
-@@ -1973,7 +2038,7 @@ export class Editor implements Component, Focusable {
+@@ -1973,7 +2048,7 @@ export class Editor implements Component, Focusable {
  		const terminalRows = this.tui.terminal.rows;
  		const pageSize = Math.max(5, Math.floor(terminalRows * 0.3));
  
@@ -2142,10 +2158,10 @@ index 000000000..44c4f0f66
 +});
 diff --git a/packages/tui/test/bidi-editor.test.ts b/packages/tui/test/bidi-editor.test.ts
 new file mode 100644
-index 000000000..4904667c4
+index 000000000..0c378a726
 --- /dev/null
 +++ b/packages/tui/test/bidi-editor.test.ts
-@@ -0,0 +1,244 @@
+@@ -0,0 +1,265 @@
 +import assert from "node:assert";
 +import { describe, it } from "node:test";
 +import { caretOffsetAtVisualColumn, configureBidi } from "../src/bidi.ts";
@@ -2301,6 +2317,25 @@ index 000000000..4904667c4
 +		}
 +	});
 +
++	it("gives the caret its own blank cell outside an RTL run, like a Latin line", () => {
++		configureBidi({ enabled: true, align: true });
++		try {
++			const editor = new Editor(createTestTUI(40), defaultEditorTheme);
++			typeInto(editor, "مرحبا ");
++			const line = editor.render(40)[1]!;
++			const painted = line.replace(/\x1b[^\x07]*\x07/g, "").replace(/\x1b\[[0-9;]*m/g, "");
++			const caretAt = visibleWidth(painted.slice(0, line.indexOf(FAKE_CURSOR_START)));
++			// The caret's cell, then the blank the writer typed, then the word: nothing is
++			// hidden under the caret, so the reader sees the space the caret sits after.
++			assert.equal(painted.charAt(caretAt), " ", painted);
++			assert.equal(painted.charAt(caretAt + 1), " ", painted);
++			assert.ok(painted.startsWith("ا", caretAt + 2), painted);
++			assert.equal(visibleWidth(line), 40, line);
++		} finally {
++			configureBidi({ enabled: true, align: false });
++		}
++	});
++
 +	it("inserts at the caret position when typing in the middle of an RTL line", () => {
 +		const editor = new Editor(createTestTUI(40), defaultEditorTheme);
 +		typeInto(editor, "مرحبا");
@@ -2329,16 +2364,18 @@ index 000000000..4904667c4
 +			const editor = new Editor(createTestTUI(40), defaultEditorTheme);
 +			typeInto(editor, "مرحبا");
 +			// The run hugs the right edge of the 40-column line, so its cells start at 35.
-+			for (const [column, logical] of [
-+				[35, 5],
-+				[36, 4],
-+				[37, 3],
-+				[38, 2],
-+				[39, 1],
++			// A click on the last cell lands the caret at the end of the text, and that caret
++			// gets its own blank cell just outside the run, the way a Latin line's does.
++			for (const [column, logical, caretAt] of [
++				[35, 5, 34],
++				[36, 4, 36],
++				[37, 3, 37],
++				[38, 2, 38],
++				[39, 1, 39],
 +			]) {
 +				click(editor, column, 1, 40);
 +				assert.strictEqual(editorState(editor).cursorCol, logical, `click on column ${column}`);
-+				assert.strictEqual(caretColumn(editor, 40), column, `caret paints on the clicked cell of column ${column}`);
++				assert.strictEqual(caretColumn(editor, 40), caretAt, `caret paints beside the cell of column ${column}`);
 +			}
 +		} finally {
 +			configureBidi({ enabled: true, align: false });
