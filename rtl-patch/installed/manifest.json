@@ -61,8 +61,8 @@
    "pkg": "pi-tui",
    "target": "dist/bidi.js",
    "source": "pi-tui/dist/bidi.js",
-   "pristineSha": "1a951cbbb4902e56434e7eac3eefb576e7b28f9132547bac18f92323e1aa0a4c",
-   "patchedSha": "36feed2332a89de49a70e1ec6a81a3441e0df845337fc127bc4fb860a06d0ebb",
+   "pristineSha": "36feed2332a89de49a70e1ec6a81a3441e0df845337fc127bc4fb860a06d0ebb",
+   "patchedSha": "68927d9dd1bdea03e74b0623bfd1f56b7dad022cae230c0689d7476195e6c60d",
    "added": true
   },
   {

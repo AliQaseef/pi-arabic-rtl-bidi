@@ -334,15 +334,13 @@ function resolveLevels(cells: Cell[], logical: string, forced?: BaseDirection): 
 		offset += cell.grapheme.length;
 	}
 
-	// Leading and trailing whitespace stay where they are. UAX #9 L1.4 resets
-	// trailing whitespace to the paragraph level so it does not jump to the other
-	// end of the line; leading whitespace needs the same anchor because in a terminal
-	// the indent is layout produced by the renderer, not content the reader is reading.
+	// Indent is layout, not content: leading whitespace stays at the left edge of the
+	// line so the column the renderer chose still lines up. Whitespace at the end of
+	// the text belongs to the paragraph and moves with it - in an RTL line the blank
+	// after the last letter is the reading end, and that is where the caret has to sit.
 	const anchorLevel = paragraph.level % 2 === 1 ? 0 : paragraph.level;
 	let first = 0;
 	while (first < cells.length && /^\s+$/.test(cells[first].grapheme)) cells[first++].level = anchorLevel;
-	let last = cells.length - 1;
-	while (last >= first && /^\s+$/.test(cells[last].grapheme)) cells[last--].level = anchorLevel;
 
 	let maxLevel = 0;
 	let minOddLevel = Infinity;
@@ -444,6 +442,11 @@ export function unpaintLine(painted: string): string {
 	const logical = parsed.cells.map((cell) => cell.grapheme).join("");
 	const range = resolveLevels(parsed.cells, logical, lineDirection(logical));
 	if (!range) return painted;
+
+	// A painted line only ends in whitespace when something padded it after painting -
+	// the renderer's padding, not text the reader read - so that blank stays put.
+	let last = parsed.cells.length - 1;
+	while (last >= 0 && /^\s+$/.test(parsed.cells[last].grapheme)) parsed.cells[last--].level = 0;
 
 	reverseRuns(parsed.cells, range[0], range[1]);
 	return emitCells(parsed.cells, parsed.trailing).text;

@@ -67,12 +67,14 @@ describe("reorderLine", () => {
 		assert.equal(reorderLine("الفقرة (الثانية) تنتهي"), "يهتنت (ةيناثلا) ةرقفلا");
 	});
 
-	it("keeps edge whitespace where the layout put it", () => {
-		// UAX #9 L1.4 keeps trailing whitespace at the end of the line. Leading
-		// whitespace is anchored the same way because in a terminal the indent is
-		// layout produced by the renderer, not content the reader is reading.
-		assert.equal(reorderLine("مرحبا   "), "ابحرم   ");
+	it("anchors the indent, moves the blank at the end of an RTL line", () => {
+		// The indent is layout produced by the renderer, so it stays where the column put
+		// it. The blank the writer typed after the text belongs to the paragraph and reads
+		// as the end of the line - the left, for a right-to-left reader.
 		assert.equal(reorderLine("  مرحبا"), "  ابحرم");
+		assert.equal(reorderLine("مرحبا   "), "   ابحرم");
+		// A Latin line has nothing to reorder, so its whitespace is untouched.
+		assert.equal(reorderLine("hello   "), "hello   ");
 	});
 
 	it("does not move positional escape sequences", () => {
@@ -208,19 +210,19 @@ describe("click-to-caret mapping", () => {
 		}
 	});
 
-	it("puts a caret at a line edge against the text, not the pinned padding", () => {
-		// The trailing space is pinned at the physical end of the line, but the caret
-		// after the last Arabic grapheme belongs to the run: it stays at the reading end.
+	it("puts a caret at the end of an RTL line on the blank after the text", () => {
+		// Painted " ابحرم": the blank is the reading end, and a caret after the last
+		// grapheme sits on it rather than on the letter.
 		assert.equal(caretPaintsAt("مرحبا ", 6), 0);
-		assert.equal(caretPaintsAt("مرحبا ", 5), 0);
 		assert.equal(caretPaintsAt("مرحبا   ", 8), 0);
+		// Between the letter and the blank is the other side of the same boundary.
+		assert.equal(caretPaintsAt("مرحبا ", 5), 1);
 		// The indent is layout too: a caret before it lands at the reading start, the right.
 		assert.equal(caretPaintsAt("  مرحبا", 0), 7);
 		// A gap between two runs is a real boundary the caret can sit in.
 		assert.equal(caretPaintsAt("hello مرحبا world", 5), 5);
 	});
 
-	// Every caret position the renderer can paint has to be reachable by a click
 	// Every caret position the renderer can paint has to be reachable by a click
 	// on the cell the caret occupies.
 	it("maps every painted caret column back to a logical offset", () => {

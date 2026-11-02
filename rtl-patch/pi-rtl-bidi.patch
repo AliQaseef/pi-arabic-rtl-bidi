@@ -473,10 +473,10 @@ index 2ed382132..b03cd8b47 100644
  
 diff --git a/packages/tui/src/bidi.ts b/packages/tui/src/bidi.ts
 new file mode 100644
-index 000000000..65244d758
+index 000000000..921459304
 --- /dev/null
 +++ b/packages/tui/src/bidi.ts
-@@ -0,0 +1,668 @@
+@@ -0,0 +1,671 @@
 +import fs from "node:fs";
 +import { homedir } from "node:os";
 +import { join } from "node:path";
@@ -813,15 +813,13 @@ index 000000000..65244d758
 +		offset += cell.grapheme.length;
 +	}
 +
-+	// Leading and trailing whitespace stay where they are. UAX #9 L1.4 resets
-+	// trailing whitespace to the paragraph level so it does not jump to the other
-+	// end of the line; leading whitespace needs the same anchor because in a terminal
-+	// the indent is layout produced by the renderer, not content the reader is reading.
++	// Indent is layout, not content: leading whitespace stays at the left edge of the
++	// line so the column the renderer chose still lines up. Whitespace at the end of
++	// the text belongs to the paragraph and moves with it - in an RTL line the blank
++	// after the last letter is the reading end, and that is where the caret has to sit.
 +	const anchorLevel = paragraph.level % 2 === 1 ? 0 : paragraph.level;
 +	let first = 0;
 +	while (first < cells.length && /^\s+$/.test(cells[first].grapheme)) cells[first++].level = anchorLevel;
-+	let last = cells.length - 1;
-+	while (last >= first && /^\s+$/.test(cells[last].grapheme)) cells[last--].level = anchorLevel;
 +
 +	let maxLevel = 0;
 +	let minOddLevel = Infinity;
@@ -923,6 +921,11 @@ index 000000000..65244d758
 +	const logical = parsed.cells.map((cell) => cell.grapheme).join("");
 +	const range = resolveLevels(parsed.cells, logical, lineDirection(logical));
 +	if (!range) return painted;
++
++	// A painted line only ends in whitespace when something padded it after painting -
++	// the renderer's padding, not text the reader read - so that blank stays put.
++	let last = parsed.cells.length - 1;
++	while (last >= 0 && /^\s+$/.test(parsed.cells[last].grapheme)) parsed.cells[last--].level = 0;
 +
 +	reverseRuns(parsed.cells, range[0], range[1]);
 +	return emitCells(parsed.cells, parsed.trailing).text;
@@ -2795,10 +2798,10 @@ index 000000000..991147e7c
 +});
 diff --git a/packages/tui/test/bidi.test.ts b/packages/tui/test/bidi.test.ts
 new file mode 100644
-index 000000000..80761407a
+index 000000000..c29f33b92
 --- /dev/null
 +++ b/packages/tui/test/bidi.test.ts
-@@ -0,0 +1,275 @@
+@@ -0,0 +1,277 @@
 +import assert from "node:assert";
 +import { describe, it } from "node:test";
 +import bidiModule, { type Bidi } from "bidi-js";
@@ -2868,12 +2871,14 @@ index 000000000..80761407a
 +		assert.equal(reorderLine("الفقرة (الثانية) تنتهي"), "يهتنت (ةيناثلا) ةرقفلا");
 +	});
 +
-+	it("keeps edge whitespace where the layout put it", () => {
-+		// UAX #9 L1.4 keeps trailing whitespace at the end of the line. Leading
-+		// whitespace is anchored the same way because in a terminal the indent is
-+		// layout produced by the renderer, not content the reader is reading.
-+		assert.equal(reorderLine("مرحبا   "), "ابحرم   ");
++	it("anchors the indent, moves the blank at the end of an RTL line", () => {
++		// The indent is layout produced by the renderer, so it stays where the column put
++		// it. The blank the writer typed after the text belongs to the paragraph and reads
++		// as the end of the line - the left, for a right-to-left reader.
 +		assert.equal(reorderLine("  مرحبا"), "  ابحرم");
++		assert.equal(reorderLine("مرحبا   "), "   ابحرم");
++		// A Latin line has nothing to reorder, so its whitespace is untouched.
++		assert.equal(reorderLine("hello   "), "hello   ");
 +	});
 +
 +	it("does not move positional escape sequences", () => {
@@ -3009,19 +3014,19 @@ index 000000000..80761407a
 +		}
 +	});
 +
-+	it("puts a caret at a line edge against the text, not the pinned padding", () => {
-+		// The trailing space is pinned at the physical end of the line, but the caret
-+		// after the last Arabic grapheme belongs to the run: it stays at the reading end.
++	it("puts a caret at the end of an RTL line on the blank after the text", () => {
++		// Painted " ابحرم": the blank is the reading end, and a caret after the last
++		// grapheme sits on it rather than on the letter.
 +		assert.equal(caretPaintsAt("مرحبا ", 6), 0);
-+		assert.equal(caretPaintsAt("مرحبا ", 5), 0);
 +		assert.equal(caretPaintsAt("مرحبا   ", 8), 0);
++		// Between the letter and the blank is the other side of the same boundary.
++		assert.equal(caretPaintsAt("مرحبا ", 5), 1);
 +		// The indent is layout too: a caret before it lands at the reading start, the right.
 +		assert.equal(caretPaintsAt("  مرحبا", 0), 7);
 +		// A gap between two runs is a real boundary the caret can sit in.
 +		assert.equal(caretPaintsAt("hello مرحبا world", 5), 5);
 +	});
 +
-+	// Every caret position the renderer can paint has to be reachable by a click
 +	// Every caret position the renderer can paint has to be reachable by a click
 +	// on the cell the caret occupies.
 +	it("maps every painted caret column back to a logical offset", () => {
